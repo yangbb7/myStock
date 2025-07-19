@@ -1,0 +1,73 @@
+# myQuant 模块化单体配置文件
+# 这是推荐的配置文件格式，支持完整的配置选项
+
+# 基础配置
+environment: "production"  # development, testing, production
+debug: false
+
+# 启用的模块
+enabled_modules:
+  - "data"
+  - "strategy"
+  - "execution"
+  - "risk"
+  - "portfolio"
+  - "analytics"
+
+# 数据库配置
+database:
+  url: "sqlite:///data/myquant.db"  # 生产环境建议使用PostgreSQL
+  echo: false  # 是否打印SQL语句
+  pool_size: 5
+  max_overflow: 10
+  pool_timeout: 30
+
+# 交易配置
+trading:
+  initial_capital: 1000000.0  # 初始资金
+  commission_rate: 0.0003     # 佣金率
+  min_commission: 5.0         # 最小佣金
+  max_position_size: 0.1      # 最大持仓比例
+  max_drawdown_limit: 0.2     # 最大回撤限制
+  max_daily_loss: 0.05        # 最大日损失限制
+
+# 性能配置
+performance:
+  max_concurrent_orders: 50   # 最大并发订单数
+  order_timeout: 10.0         # 订单超时时间(秒)
+  data_buffer_size: 1000      # 数据缓冲区大小
+  enable_cache: true          # 是否启用缓存
+  cache_size: 10000          # 缓存大小
+  batch_size: 100            # 批处理大小
+
+# 日志配置
+logging:
+  level: "INFO"                    # DEBUG, INFO, WARNING, ERROR
+  file: "logs/monolith.log"        # 日志文件路径
+  max_size: 10485760              # 日志文件最大大小 (10MB)
+  backup_count: 5                 # 备份文件数量
+  enable_console: true            # 是否输出到控制台
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+# API配置
+api:
+  host: "0.0.0.0"           # API监听地址
+  port: 8000                # API端口
+  debug: false              # 是否开启调试模式
+  enable_docs: true         # 是否启用API文档
+  enable_cors: true         # 是否启用CORS
+  cors_origins:             # CORS允许的源
+    - "*"
+
+# 监控配置
+monitoring:
+  enable_metrics: true           # 是否启用指标收集
+  metrics_port: 8080            # 指标端口
+  enable_health_check: true     # 是否启用健康检查
+  health_check_interval: 30     # 健康检查间隔(秒)
+  enable_prometheus: false      # 是否启用Prometheus
+  prometheus_port: 9090         # Prometheus端口
+
+# 配置元数据
+config_source: "file"
+loaded_at: null

@@ -1,0 +1,19 @@
+{
+  "shard_key": "unknown_20250718",
+  "created_at": "2025-07-18T16:24:34.479612",
+  "record_count": 12,
+  "size_bytes": 0,
+  "symbols": [
+    "AAPL",
+    "MSFT",
+    "TSLA",
+    "GOOGL"
+  ],
+  "data_sources": [
+    "Bloomberg",
+    "Wind",
+    "Alpha"
+  ],
+  "quality_avg": 0.0,
+  "last_updated": "2025-07-18T16:24:38.695912"
+}

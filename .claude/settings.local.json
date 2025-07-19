@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest tests/unit/test_data_manager.py tests/unit/test_backtest_engine.py::TestBacktestEngine::test_data_validation_success tests/unit/test_portfolio_manager.py::TestPortfolioManager::test_portfolio_manager_init_invalid_capital -q)",
+      "Bash(python -m pytest tests/unit/test_order_manager.py::TestOrderManager::test_order_manager_init_invalid_config -v)",
+      "Bash(python:*)",
+      "Bash(cp:*)",
+      "Bash(# Remove comment symbols from analyzer lines and other test code lines\nsed -i '''' ''\n# Remove comment from analyzer lines\ns/^        # analyzer = /        analyzer = /g\n# Remove comment from other lines with specific patterns\ns/^        # \\([a-zA-Z_][a-zA-Z0-9_]*.*=.*analyzer\\)/        \\1/g\ns/^        # \\(assert.*\\)/        \\1/g\ns/^        # \\([a-zA-Z_][a-zA-Z0-9_]* = \\)/        \\1/g\ns/^        # \\(.*\\..*(\\)/        \\1/g\ns/^        # \\(.*\\[.*\\]\\)/        \\1/g\ns/^        # \\(# .*\\)/        \\1/g\n'' tests/unit/test_performance_analyzer.py)",
+      "Bash(sed:*)",
+      "Bash(for:*)",
+      "Bash(do)",
+      "Bash(done)",
+      "Bash(rg:*)",
+      "Bash(/Library/Frameworks/Python.framework/Versions/3.8/bin/pytest tests/unit/test_order_manager.py::TestOrderManager::test_create_order_invalid_price -v)",
+      "Bash(pytest:*)",
+      "Bash(PYTHONPATH:*)"
+    ],
+    "deny": [],
+    "defaultMode": "bypassPermissions"
+  }
+}

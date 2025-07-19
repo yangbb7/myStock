@@ -1,0 +1,67 @@
+# 开发环境配置
+environment: "development"
+debug: true
+
+# 开发环境启用所有模块
+enabled_modules:
+  - "data"
+  - "strategy"
+  - "execution"
+  - "risk"
+  - "portfolio"
+  - "analytics"
+
+# 开发环境数据库配置
+database:
+  url: "sqlite:///data/myquant_dev.db"
+  echo: true  # 开发环境打印SQL语句
+  pool_size: 3
+  max_overflow: 5
+  pool_timeout: 30
+
+# 开发环境交易配置
+trading:
+  initial_capital: 100000.0   # 较小的初始资金用于测试
+  commission_rate: 0.0003
+  min_commission: 5.0
+  max_position_size: 0.2      # 允许更大的持仓比例用于测试
+  max_drawdown_limit: 0.3
+  max_daily_loss: 0.1
+
+# 开发环境性能配置
+performance:
+  max_concurrent_orders: 10   # 较小的并发数
+  order_timeout: 5.0
+  data_buffer_size: 500
+  enable_cache: true
+  cache_size: 1000
+  batch_size: 50
+
+# 开发环境日志配置
+logging:
+  level: "DEBUG"              # 详细的日志级别
+  file: "logs/dev.log"
+  max_size: 5242880          # 5MB
+  backup_count: 3
+  enable_console: true
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s"
+
+# 开发环境API配置
+api:
+  host: "127.0.0.1"          # 只允许本地访问
+  port: 8000
+  debug: true                # 启用调试模式
+  enable_docs: true
+  enable_cors: true
+  cors_origins:
+    - "http://localhost:3000"  # 前端开发服务器
+    - "http://127.0.0.1:3000"
+
+# 开发环境监控配置
+monitoring:
+  enable_metrics: true
+  metrics_port: 8080
+  enable_health_check: true
+  health_check_interval: 10  # 更频繁的健康检查
+  enable_prometheus: false
+  prometheus_port: 9090
