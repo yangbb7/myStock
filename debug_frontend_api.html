@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>前端API调试</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; }
+        .success { color: green; }
+        .error { color: red; }
+        .loading { color: blue; }
+        pre { background: #f5f5f5; padding: 10px; overflow-x: auto; }
+        button { padding: 10px 20px; margin: 5px; }
+    </style>
+</head>
+<body>
+    <h1>🔧 前端API调试工具</h1>
+    
+    <div class="test-section">
+        <h2>后端连接测试</h2>
+        <button onclick="testHealthAPI()">测试健康检查</button>
+        <div id="health-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>实时股票数据测试</h2>
+        <button onclick="testStockAPI()">测试股票API</button>
+        <div id="stock-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>前端API调用测试</h2>
+        <button onclick="testFrontendAPI()">模拟前端API调用</button>
+        <div id="frontend-result"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        
+        function log(elementId, message, className = '') {
+            const element = document.getElementById(elementId);
+            element.innerHTML += `<div class="${className}">${new Date().toLocaleTimeString()}: ${message}</div>`;
+        }
+        
+        function clearLog(elementId) {
+            document.getElementById(elementId).innerHTML = '';
+        }
+        
+        async function testHealthAPI() {
+            clearLog('health-result');
+            log('health-result', '正在测试健康检查API...', 'loading');
+            
+            try {
+                const response = await fetch(`${API_BASE}/health`);
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    log('health-result', '✅ 健康检查成功', 'success');
+                    log('health-result', `<pre>${JSON.stringify(data, null, 2)}</pre>`);
+                } else {
+                    log('health-result', '❌ 健康检查失败', 'error');
+                    log('health-result', `<pre>${JSON.stringify(data, null, 2)}</pre>`);
+                }
+            } catch (error) {
+                log('health-result', `❌ 网络错误: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testStockAPI() {
+            clearLog('stock-result');
+            const symbols = ['000001.SZ', '000002.SZ', '600000.SH', '600036.SH'];
+            
+            for (const symbol of symbols) {
+                log('stock-result', `正在测试 ${symbol}...`, 'loading');
+                
+                try {
+                    const response = await fetch(`${API_BASE}/data/realtime/${symbol}`);
+                    const data = await response.json();
+                    
+                    if (response.ok && data.success) {
+                        log('stock-result', `✅ ${symbol}: ${data.data.name} - ¥${data.data.current_price}`, 'success');
+                    } else {
+                        log('stock-result', `❌ ${symbol}: ${data.message || '未知错误'}`, 'error');
+                        log('stock-result', `<pre>${JSON.stringify(data, null, 2)}</pre>`);
+                    }
+                } catch (error) {
+                    log('stock-result', `❌ ${symbol}: 网络错误 - ${error.message}`, 'error');
+                }
+            }
+        }
+        
+        async function testFrontendAPI() {
+            clearLog('frontend-result');
+            log('frontend-result', '模拟前端API调用...', 'loading');
+            
+            // 模拟前端的完整请求流程
+            try {
+                const symbol = '000001.SZ';
+                
+                // 1. 测试原始fetch调用
+                log('frontend-result', '1. 测试原始fetch调用', 'loading');
+                const fetchResponse = await fetch(`${API_BASE}/data/realtime/${symbol}`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                const fetchData = await fetchResponse.json();
+                log('frontend-result', `Fetch结果: ${fetchResponse.status}`, fetchResponse.ok ? 'success' : 'error');
+                log('frontend-result', `<pre>${JSON.stringify(fetchData, null, 2)}</pre>`);
+                
+                // 2. 模拟axios调用（带拦截器）
+                log('frontend-result', '2. 模拟axios风格调用', 'loading');
+                
+                // 检查响应格式是否符合前端预期
+                if (fetchData && fetchData.success && fetchData.data) {
+                    const stockData = fetchData.data;
+                    if (stockData.current_price) {
+                        log('frontend-result', '✅ 数据格式符合前端预期', 'success');
+                        log('frontend-result', `价格: ¥${stockData.current_price}, 名称: ${stockData.name}`, 'success');
+                    } else {
+                        log('frontend-result', '❌ 缺少价格数据', 'error');
+                    }
+                } else {
+                    log('frontend-result', '❌ 响应格式不符合前端预期', 'error');
+                }
+                
+            } catch (error) {
+                log('frontend-result', `❌ 前端API测试失败: ${error.message}`, 'error');
+                console.error('Frontend API test error:', error);
+            }
+        }
+        
+        // 页面加载时自动运行测试
+        window.onload = function() {
+            console.log('页面加载完成，可以开始测试');
+        };
+    </script>
+</body>
+</html>

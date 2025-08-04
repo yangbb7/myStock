@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "name": "Python Virtual Environment Monitor",
+  "description": "Monitors changes to the Python virtual environment in .venv/ directory and provides guidance on environment management, dependency updates, and virtual environment best practices",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      ".venv/**/*"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "The Python virtual environment in .venv/ has been modified. Please analyze the changes and provide guidance on:\n\n1. What changes were made to the virtual environment\n2. Impact on project dependencies and compatibility\n3. Best practices for virtual environment management\n4. Any potential issues or recommendations\n5. Whether requirements.txt or other dependency files need updating\n\nFocus on helping maintain a clean and well-managed Python development environment."
+  }
+}

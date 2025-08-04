@@ -330,17 +330,33 @@ class EastMoneyProvider(DataProviderInterface):
         try:
             em_symbol = self._convert_symbol(symbol)
 
+            # 使用更完整的实时数据API
             params = {
                 "secids": em_symbol,
-                "fields": "f43",  # 当前价格
+                "fields": "f43,f44,f45,f46,f47,f48,f57,f58",  # 更多字段
                 "ut": "fa5fd1943c7b386f172d6893dbfba10b",
+                "fltt": "2",
+                "invt": "2"
             }
 
             response = requests.get(self.realtime_url, params=params, timeout=10)
             if response.status_code == 200:
                 data = response.json()
-                if data.get("data") and data["data"].get("diff"):
-                    return float(data["data"]["diff"][0]["f43"])
+                if data.get("data") and data["data"].get("diff") and len(data["data"]["diff"]) > 0:
+                    stock_data = data["data"]["diff"][0]
+                    # f43是当前价格字段
+                    current_price = stock_data.get("f43", 0)
+                    if current_price and current_price != "-":
+                        return float(current_price)
+
+            # 如果实时API失败，使用历史数据的最新价格作为备用
+            from datetime import datetime, timedelta
+            end_date = datetime.now().strftime("%Y-%m-%d")
+            start_date = (datetime.now() - timedelta(days=3)).strftime("%Y-%m-%d")
+            
+            hist_data = self.get_stock_data(symbol, start_date, end_date)
+            if not hist_data.empty:
+                return float(hist_data.iloc[-1]["close"])
 
         except Exception as e:
             self.logger.error(f"获取东方财富当前价格失败: {symbol}, {e}")
@@ -369,6 +385,16 @@ class RealDataProvider:
         self.logger = logging.getLogger(__name__)
         self.providers = {}
 
+        # 初始化故障转移管理器
+        from ..fallback_manager import FallbackManager
+        fallback_config = {
+            'fallback_strategy': config.get('fallback_strategy', 'graceful_degradation'),
+            'max_retries': config.get('max_retries', 3),
+            'quality_threshold': config.get('quality_threshold', 0.8),
+            'quality_config': config.get('quality_config', {})
+        }
+        self.fallback_manager = FallbackManager(fallback_config)
+
         # 初始化数据提供者
         self._init_providers()
 
@@ -378,8 +404,23 @@ class RealDataProvider:
             "fallback_providers", ["yahoo", "eastmoney"]
         )
 
+        # 注册数据源到故障转移管理器
+        self._register_data_sources()
+
     def _init_providers(self):
         """初始化数据提供者"""
+        # 券商API集成（优先级最高）
+        if "broker_apis" in self.config and self.config["broker_apis"]:
+            try:
+                from .broker_api_providers import BrokerAPIManager
+                self.broker_api_manager = BrokerAPIManager(self.config["broker_apis"])
+                self.logger.info("券商API管理器初始化成功")
+            except Exception as e:
+                self.logger.error(f"券商API管理器初始化失败: {e}")
+                self.broker_api_manager = None
+        else:
+            self.broker_api_manager = None
+
         # Tushare
         if "tushare" in self.config and self.config["tushare"].get("token"):
             try:
@@ -406,27 +447,68 @@ class RealDataProvider:
             except Exception as e:
                 self.logger.error(f"东方财富提供者初始化失败: {e}")
 
+    def _register_data_sources(self):
+        """注册数据源到故障转移管理器"""
+        # 注册券商API（优先级最高）
+        if self.broker_api_manager:
+            self.fallback_manager.register_data_source('broker_api', priority=1)
+        
+        # 注册传统数据源
+        for source_name in self.providers.keys():
+            if source_name == 'tushare':
+                priority = 2
+            elif source_name == 'yahoo':
+                priority = 3
+            elif source_name == 'eastmoney':
+                priority = 4
+            else:
+                priority = 10
+            
+            self.fallback_manager.register_data_source(source_name, priority)
+        
+        self.logger.info(f"已注册{len(self.providers) + (1 if self.broker_api_manager else 0)}个数据源")
+
     def get_stock_data(
         self, symbol: str, start_date: str, end_date: str
     ) -> pd.DataFrame:
-        """获取股票历史数据（带备用机制）"""
-        providers_to_try = [self.primary_provider] + self.fallback_providers
-
-        for provider_name in providers_to_try:
-            if provider_name in self.providers:
-                try:
-                    df = self.providers[provider_name].get_stock_data(
-                        symbol, start_date, end_date
-                    )
-                    if not df.empty:
-                        self.logger.info(f"从{provider_name}成功获取{symbol}的数据")
-                        return df
-                except Exception as e:
-                    self.logger.warning(f"{provider_name}获取数据失败: {e}")
-                    continue
-
-        self.logger.error(f"所有数据源都无法获取{symbol}的数据")
-        return pd.DataFrame()
+        """获取股票历史数据（使用故障转移机制）"""
+        # 构建数据获取函数字典
+        data_fetchers = {}
+        
+        # 添加券商API获取函数
+        if self.broker_api_manager:
+            def broker_fetch(symbol, start_date, end_date):
+                # 券商API通常不提供历史数据，这里可以扩展
+                # 暂时返回空DataFrame
+                return pd.DataFrame()
+            data_fetchers['broker_api'] = broker_fetch
+        
+        # 添加传统数据源获取函数
+        for provider_name, provider in self.providers.items():
+            data_fetchers[provider_name] = provider.get_stock_data
+        
+        try:
+            # 使用故障转移管理器执行数据获取
+            data, successful_source, quality_metrics = self.fallback_manager.execute_with_fallback(
+                data_fetchers, symbol, start_date, end_date
+            )
+            
+            self.logger.info(
+                f"从{successful_source}成功获取{symbol}的数据，"
+                f"质量评分: {quality_metrics.overall_score:.2f}"
+            )
+            
+            return data
+            
+        except Exception as e:
+            self.logger.error(f"所有数据源都无法获取{symbol}的数据: {e}")
+            # 不再生成Mock数据，直接抛出异常
+            raise DataSourceException(
+                f"无法从任何数据源获取{symbol}的真实数据",
+                symbol=symbol,
+                data_source="All",
+                cause=e
+            )
 
     def get_current_price(self, symbol: str) -> float:
         """获取当前价格（带备用机制）"""
@@ -446,23 +528,39 @@ class RealDataProvider:
         return 0.0
 
     def get_realtime_data(self, symbols: List[str]) -> Dict[str, Dict[str, Any]]:
-        """获取实时数据"""
+        """获取实时数据（优先使用券商API）"""
         result = {}
 
-        # 尝试从主要提供者获取所有数据
+        # 优先使用券商API获取实时数据
+        if self.broker_api_manager:
+            try:
+                broker_data = self.broker_api_manager.get_realtime_data(symbols)
+                if broker_data and len(broker_data) > 0:
+                    self.logger.info(f"从券商API获取到{len(broker_data)}个股票的实时数据")
+                    result.update(broker_data)
+                    # 如果券商API获取了所有数据，直接返回
+                    if len(result) == len(symbols):
+                        return result
+            except Exception as e:
+                self.logger.warning(f"券商API获取实时数据失败: {e}")
+
+        # 如果券商API未能获取所有数据，使用传统数据源补充
+        missing_symbols = [s for s in symbols if s not in result]
+        if not missing_symbols:
+            return result
+
+        # 尝试从主要提供者获取缺失数据
         if self.primary_provider in self.providers:
             try:
-                result = self.providers[self.primary_provider].get_realtime_data(
-                    symbols
+                provider_data = self.providers[self.primary_provider].get_realtime_data(
+                    missing_symbols
                 )
-                if len(result) == len(symbols):
-                    return result
+                result.update(provider_data)
+                missing_symbols = [s for s in missing_symbols if s not in provider_data]
             except Exception as e:
                 self.logger.warning(f"{self.primary_provider}获取实时数据失败: {e}")
 
-        # 如果主要提供者失败，逐个股票尝试备用提供者
-        missing_symbols = [s for s in symbols if s not in result]
-
+        # 如果仍有缺失数据，逐个股票尝试备用提供者
         for symbol in missing_symbols:
             price = self.get_current_price(symbol)
             if price > 0:
@@ -473,6 +571,30 @@ class RealDataProvider:
                 }
 
         return result
+
+    def get_account_positions(self, broker_name: Optional[str] = None) -> Dict[str, Any]:
+        """获取券商账户持仓数据"""
+        if self.broker_api_manager:
+            try:
+                return self.broker_api_manager.get_account_positions(broker_name)
+            except Exception as e:
+                self.logger.error(f"获取券商持仓数据失败: {e}")
+                return {}
+        else:
+            self.logger.warning("券商API管理器未初始化，无法获取持仓数据")
+            return {}
+
+    def get_order_status(self, order_id: str, broker_name: Optional[str] = None) -> Dict[str, Any]:
+        """获取券商订单状态"""
+        if self.broker_api_manager:
+            try:
+                return self.broker_api_manager.get_order_status(order_id, broker_name)
+            except Exception as e:
+                self.logger.error(f"获取券商订单状态失败: {e}")
+                return {}
+        else:
+            self.logger.warning("券商API管理器未初始化，无法获取订单状态")
+            return {}
 
     def test_connection(self) -> Dict[str, bool]:
         """测试所有数据源连接"""
@@ -495,3 +617,39 @@ class RealDataProvider:
                 results[name] = False
 
         return results
+
+    def get_health_status(self) -> Dict[str, Any]:
+        """获取数据提供者健康状态
+        
+        Returns:
+            Dict[str, Any]: 健康状态报告
+        """
+        return self.fallback_manager.get_health_report()
+
+    def get_quality_report(self) -> Dict[str, Any]:
+        """获取数据质量报告
+        
+        Returns:
+            Dict[str, Any]: 数据质量报告
+        """
+        return self.fallback_manager.quality_monitor.get_quality_report()
+
+    def get_recommended_sources(self, count: int = 3) -> List[str]:
+        """获取推荐的数据源
+        
+        Args:
+            count: 推荐数量
+            
+        Returns:
+            List[str]: 推荐的数据源列表
+        """
+        return self.fallback_manager.get_recommended_sources(count)
+
+    def reset_source_status(self, source_name: str):
+        """重置数据源状态
+        
+        Args:
+            source_name: 数据源名称
+        """
+        self.fallback_manager.reset_circuit_breaker(source_name)
+        self.logger.info(f"数据源{source_name}状态已重置")

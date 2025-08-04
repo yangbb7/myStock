@@ -16,9 +16,9 @@ import pytest
 import requests
 
 # Local imports
-from core.managers.data_manager import DataManager
+from myQuant.core.managers.data_manager import DataManager
 from tests.base_test import BaseTestCase, TestDataFactory, MockFactory, IsolatedComponentFactory
-from core.exceptions import DataException
+from myQuant.core.exceptions import DataException
 
 class TestDataManager(BaseTestCase):
     """数据管理器测试用例 - 覆盖常规case和边缘case"""

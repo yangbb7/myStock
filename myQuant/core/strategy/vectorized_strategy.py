@@ -11,7 +11,7 @@ import warnings
 
 from .base_strategy import BaseStrategy, StrategyState
 from .technical_indicators import TechnicalIndicators
-from ..models.signals import Signal, SignalType
+from ..models.signals import TradingSignal, SignalType
 from ..events.event_types import SignalEvent
 
 warnings.filterwarnings('ignore')
@@ -190,7 +190,7 @@ class VectorizedStrategy(BaseStrategy):
         # 这里是默认实现，子类应该重写这个方法
         return signals_df
     
-    def generate_signals(self, data: pd.DataFrame) -> List[Signal]:
+    def generate_signals(self, data: pd.DataFrame) -> List[TradingSignal]:
         """
         生成交易信号（重写基类方法）
         
@@ -198,7 +198,7 @@ class VectorizedStrategy(BaseStrategy):
             data: 市场数据
             
         Returns:
-            List[Signal]: 交易信号列表
+            List[TradingSignal]: 交易信号列表
         """
         signals = []
         
@@ -220,27 +220,27 @@ class VectorizedStrategy(BaseStrategy):
             # 生成信号
             signals_df = self.generate_signals_vectorized(symbol, indicators_data)
             
-            # 转换为Signal对象
+            # 转换为TradingSignal对象
             symbol_signals = self._convert_signals_dataframe_to_objects(signals_df)
             signals.extend(symbol_signals)
             
         return signals
     
-    def _convert_signals_dataframe_to_objects(self, signals_df: pd.DataFrame) -> List[Signal]:
+    def _convert_signals_dataframe_to_objects(self, signals_df: pd.DataFrame) -> List[TradingSignal]:
         """
-        将信号DataFrame转换为Signal对象列表
+        将信号DataFrame转换为TradingSignal对象列表
         
         Args:
             signals_df: 信号DataFrame
             
         Returns:
-            List[Signal]: Signal对象列表
+            List[TradingSignal]: TradingSignal对象列表
         """
         signals = []
         
         for idx, row in signals_df.iterrows():
             if row['buy_signal']:
-                signal = Signal(
+                signal = TradingSignal(
                     symbol=row['symbol'],
                     signal_type=SignalType.BUY,
                     timestamp=idx if isinstance(idx, datetime) else datetime.now(),
@@ -255,7 +255,7 @@ class VectorizedStrategy(BaseStrategy):
                 signals.append(signal)
                 
             elif row['sell_signal']:
-                signal = Signal(
+                signal = TradingSignal(
                     symbol=row['symbol'],
                     signal_type=SignalType.SELL,
                     timestamp=idx if isinstance(idx, datetime) else datetime.now(),
@@ -287,7 +287,7 @@ class VectorizedStrategy(BaseStrategy):
         
         return int(base_quantity * strength)
     
-    def batch_process_signals(self, data_batch: Dict[str, pd.DataFrame]) -> Dict[str, List[Signal]]:
+    def batch_process_signals(self, data_batch: Dict[str, pd.DataFrame]) -> Dict[str, List[TradingSignal]]:
         """
         批量处理多个标的的信号
         
@@ -295,7 +295,7 @@ class VectorizedStrategy(BaseStrategy):
             data_batch: 标的数据批次 {symbol: DataFrame}
             
         Returns:
-            Dict[str, List[Signal]]: 标的信号字典
+            Dict[str, List[TradingSignal]]: 标的信号字典
         """
         start_time = datetime.now()
         results = {}
@@ -327,7 +327,7 @@ class VectorizedStrategy(BaseStrategy):
         
         return results
     
-    def calculate_signal_statistics(self, signals: List[Signal]) -> Dict[str, Any]:
+    def calculate_signal_statistics(self, signals: List[TradingSignal]) -> Dict[str, Any]:
         """
         计算信号统计信息
         

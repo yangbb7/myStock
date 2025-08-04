@@ -20,6 +20,7 @@ from ..core.trading_system import TradingSystem
 from ..infrastructure.monitoring.exception_logger import ExceptionLogger
 from ..infrastructure.monitoring.logging import configure_logging
 from ..infrastructure.monitoring.metrics import MetricsCollector
+from ..infrastructure.database.database_manager import DatabaseManager
 from .config.settings import ConfigManager, get_config_manager
 
 
@@ -31,7 +32,16 @@ class ApplicationContainer(containers.DeclarativeContainer):
     config = providers.Singleton(lambda cm: cm.get_config() or cm.load_config(), cm=config_manager)
 
     # 日志配置
-    logging_config = providers.Resource(configure_logging)
+    logging_config = providers.Resource(configure_logging, config=config)
+
+    # 数据库管理器
+    db_manager = providers.Singleton(
+        DatabaseManager, 
+        database_url=providers.Callable(
+            lambda cfg: getattr(getattr(cfg, 'database', None), 'url', 'sqlite:///test.db') if cfg else 'sqlite:///test.db',
+            config
+        )
+    )
 
     # 异常日志记录器
     exception_logger = providers.Singleton(ExceptionLogger)
@@ -46,14 +56,14 @@ class ApplicationContainer(containers.DeclarativeContainer):
 
     # 投资组合管理器
     portfolio_manager = providers.Factory(
-        PortfolioManager, config=config.provided.trading
+        PortfolioManager, db_manager=db_manager, config=config.provided.trading
     )
 
     # 订单管理器
-    order_manager = providers.Factory(OrderManager, config=config.provided.trading)
+    order_manager = providers.Factory(OrderManager, db_manager=db_manager)
 
     # 风险管理器
-    risk_manager = providers.Factory(RiskManager, config=config.provided.trading)
+    risk_manager = providers.Factory(RiskManager, db_manager=db_manager, config=config.provided.trading)
 
     # 执行引擎
     execution_engine = providers.Factory(

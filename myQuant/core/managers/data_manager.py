@@ -114,86 +114,13 @@ class EmQuantProvider:
                     cause=e,
                 )
 
-        # 备用方案：返回少量历史数据（从最后一个交易日推算）
-        return self._get_fallback_data(symbol, start_date, end_date)
+        # 如果真实数据提供者也无法获取数据，抛出异常而不是生成Mock数据
+        raise DataSourceException(
+            f"所有数据源都无法获取{symbol}的真实数据，请检查券商API连接或数据源配置",
+            symbol=symbol,
+            data_source="EmQuant",
+        )
 
-    def _get_fallback_data(
-        self, symbol: str, start_date: str, end_date: str
-    ) -> pd.DataFrame:
-        """备用数据生成方案"""
-        try:
-            from datetime import datetime, timedelta
-
-            # 尝试获取最近的真实价格作为基准
-            current_price = 15.0  # 默认基准价格
-            if self.real_provider:
-                try:
-                    real_price = self.real_provider.get_current_price(symbol)
-                    if real_price > 0:
-                        current_price = real_price
-                except:
-                    pass
-
-            # 生成基于真实价格的历史数据
-            dates = pd.date_range(start_date, end_date, freq="D")
-            data = []
-
-            # 使用更现实的价格模型
-            base_price = current_price
-            daily_volatility = 0.02  # 2%日波动率
-
-            for i, date in enumerate(dates):
-                if date.weekday() < 5:  # 工作日
-                    # 使用几何布朗运动模型
-                    drift = 0.0001  # 年化收益率约2.5%
-                    random_shock = np.random.normal(0, daily_volatility)
-
-                    price_change = base_price * (drift + random_shock)
-                    new_price = base_price + price_change
-
-                    # 生成OHLC数据
-                    intraday_volatility = daily_volatility * 0.5
-                    open_price = base_price * (
-                        1 + np.random.normal(0, intraday_volatility * 0.3)
-                    )
-                    close_price = new_price
-                    high_price = max(open_price, close_price) * (
-                        1 + abs(np.random.normal(0, intraday_volatility * 0.2))
-                    )
-                    low_price = min(open_price, close_price) * (
-                        1 - abs(np.random.normal(0, intraday_volatility * 0.2))
-                    )
-
-                    # 确保价格逻辑正确
-                    high_price = max(high_price, open_price, close_price)
-                    low_price = min(low_price, open_price, close_price)
-
-                    # 成交量模型（基于价格波动）
-                    volume_base = 1000000
-                    volume_multiplier = 1 + abs(random_shock) * 2  # 波动大时成交量增加
-                    volume = int(volume_base * volume_multiplier)
-
-                    data.append(
-                        {
-                            "date": date,
-                            "symbol": symbol,
-                            "open": max(0.01, open_price),
-                            "high": max(0.01, high_price),
-                            "low": max(0.01, low_price),
-                            "close": max(0.01, close_price),
-                            "volume": volume,
-                            "adj_close": max(0.01, close_price),
-                        }
-                    )
-
-                    base_price = close_price
-
-            self.logger.info(f"为{symbol}生成了{len(data)}天的备用数据")
-            return pd.DataFrame(data)
-
-        except Exception as e:
-            self.logger.error(f"生成备用数据失败: {e}")
-            return pd.DataFrame()
 
 
 class DataManager:
@@ -381,6 +308,8 @@ class DataManager:
             self.logger.error(f"获取价格数据失败: {str(e)}")
             # 发布数据错误事件
             self._publish_data_error_event(symbol, str(e))
+            
+            # 返回空数据框，不使用模拟数据
             return pd.DataFrame()
 
     def get_financial_data(self, symbol: str, report_date: str) -> Optional[pd.Series]:
@@ -528,21 +457,9 @@ class DataManager:
         except Exception as e:
             self.logger.error(f"获取{symbol}当前价格失败: {e}")
 
-        # 最后的备用方案：返回历史平均价格
-        try:
-            # 根据股票代码估算合理价格范围
-            if symbol.startswith("000001"):  # 平安银行
-                return 12.5
-            elif symbol.startswith("000002"):  # 万科A
-                return 8.5
-            elif symbol.startswith("600519"):  # 贵州茅台
-                return 1800.0
-            elif symbol.startswith("600036"):  # 招商银行
-                return 40.0
-            else:
-                return 15.0  # 通用默认价格
-        except:
-            return 15.0
+        # 如果无法获取真实价格数据，返回0表示数据不可用
+        self.logger.warning(f"无法获取{symbol}的真实价格数据，请检查数据源配置")
+        return 0.0
 
     def process_bar(self, bar_data: Dict[str, Any]):
         """处理Bar数据"""
@@ -812,3 +729,161 @@ class DataManager:
         """禁用事件发布"""
         self._enable_events = False
         self.logger.info("数据管理器事件发布已禁用")
+    
+    async def get_stock_info(self, symbol: str) -> Dict[str, Any]:
+        """获取股票基本信息"""
+        try:
+            # 先尝试从实际数据提供者获取
+            if hasattr(self.provider, 'real_provider') and self.provider.real_provider:
+                try:
+                    info = await self.provider.real_provider.get_stock_info(symbol)
+                    if info:
+                        return info
+                except Exception as e:
+                    self.logger.warning(f"从真实数据提供者获取股票信息失败: {e}")
+            
+            # 使用本地映射作为后备
+            from ...infrastructure.data.providers.real_data_provider import RealDataProvider
+            from ...utils.stockMapping import STOCK_SYMBOL_MAP, getStockInfo
+            
+            if symbol in STOCK_SYMBOL_MAP:
+                stock_info = getStockInfo(symbol)
+                return {
+                    'symbol': stock_info['symbol'],
+                    'name': stock_info['name'],
+                    'exchange': stock_info['exchange'],
+                    'sector': '未知',
+                    'industry': '未知',
+                    'listing_date': None,
+                    'source': 'local_mapping'
+                }
+            
+            # 如果没有在本地映射中找到，返回基本信息
+            exchange = 'SH' if symbol.endswith('.SH') else 'SZ'
+            return {
+                'symbol': symbol,
+                'name': symbol,  # 使用代码作为名称
+                'exchange': exchange,
+                'sector': '未知',
+                'industry': '未知',
+                'listing_date': None,
+                'source': 'default'
+            }
+            
+        except Exception as e:
+            self.logger.error(f"获取股票信息失败: {e}")
+            return {
+                'symbol': symbol,
+                'name': symbol,
+                'exchange': 'SH' if symbol.endswith('.SH') else 'SZ',
+                'error': str(e)
+            }
+    
+    async def search_stocks(self, keyword: str, limit: int = 20) -> Dict[str, Any]:
+        """搜索股票"""
+        try:
+            from ...utils.stockMapping import STOCK_SYMBOL_MAP, searchStocks
+            
+            if not keyword or keyword.strip() == "":
+                # 返回所有可用股票
+                all_stocks = []
+                for symbol, name in list(STOCK_SYMBOL_MAP.items())[:limit]:
+                    all_stocks.append({
+                        'symbol': symbol,
+                        'name': name,
+                        'exchange': 'SH' if symbol.endswith('.SH') else 'SZ'
+                    })
+                return {
+                    'stocks': all_stocks,
+                    'total': len(STOCK_SYMBOL_MAP),
+                    'keyword': keyword
+                }
+            
+            # 搜索匹配的股票
+            results = []
+            keyword_lower = keyword.lower()
+            
+            for symbol, name in STOCK_SYMBOL_MAP.items():
+                if (keyword_lower in symbol.lower() or keyword in name):
+                    results.append({
+                        'symbol': symbol,
+                        'name': name,
+                        'exchange': 'SH' if symbol.endswith('.SH') else 'SZ'
+                    })
+                    if len(results) >= limit:
+                        break
+            
+            return {
+                'stocks': results,
+                'total': len(results),
+                'keyword': keyword
+            }
+            
+        except Exception as e:
+            self.logger.error(f"搜索股票失败: {e}")
+            return {
+                'stocks': [],
+                'total': 0,
+                'keyword': keyword,
+                'error': str(e)
+            }
+    
+    def get_processing_status(self) -> Dict[str, Any]:
+        """获取数据处理状态"""
+        try:
+            current_time = datetime.now().isoformat()
+            cache_stats = {
+                'hit_rate': (
+                    self.cache.cache_hit_count / 
+                    (self.cache.cache_hit_count + self.cache.cache_miss_count)
+                    if (self.cache.cache_hit_count + self.cache.cache_miss_count) > 0 
+                    else 0
+                ),
+                'cache_size': len(self.cache.cache),
+                'hits': self.cache.cache_hit_count,
+                'misses': self.cache.cache_miss_count
+            }
+            
+            async_stats = self.get_async_stats() if hasattr(self, 'get_async_stats') else {}
+            
+            # 获取数据质量统计
+            data_quality = {}
+            if hasattr(self, 'data_provider') and self.data_provider:
+                if hasattr(self.data_provider, 'get_quality_report'):
+                    data_quality = self.data_provider.get_quality_report()
+            
+            # 获取实时连接状态
+            connection_status = {}
+            if hasattr(self, 'data_provider') and self.data_provider:
+                if hasattr(self.data_provider, 'test_connection'):
+                    connection_status = self.data_provider.test_connection()
+            
+            return {
+                'status': 'running',
+                'lastUpdate': current_time,
+                'processedCount': getattr(self, '_processed_count', 0),
+                'queueSize': getattr(self, '_queue_size', 0),
+                'errorRate': getattr(self, '_error_rate', 0.0),
+                'cache': cache_stats,
+                'async_mode': async_stats,
+                'data_quality': data_quality,
+                'connections': connection_status,
+                'timestamp': current_time
+            }
+        except Exception as e:
+            self.logger.error(f"获取数据处理状态失败: {e}")
+            return {
+                'status': 'error',
+                'message': str(e),
+                'timestamp': datetime.now().isoformat()
+            }
+    
+    async def fetch_all(self, query: str, params: list = None) -> List[Dict]:
+        """模拟数据库查询 - 获取多行结果"""
+        # 这里可以实际连接数据库，现在返回空结果
+        return []
+    
+    async def fetch_one(self, query: str, params: list = None) -> Optional[Dict]:
+        """模拟数据库查询 - 获取单行结果"""
+        # 这里可以实际连接数据库，现在返回 None
+        return None

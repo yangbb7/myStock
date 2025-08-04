@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Direct API Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .result { margin: 10px 0; padding: 10px; border-radius: 4px; }
+        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .loading { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        pre { background: #f8f9fa; padding: 10px; overflow-x: auto; }
+        button { padding: 10px 20px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>Direct API Test from Frontend</h1>
+    <p>Testing from: <span id="current-url"></span></p>
+    
+    <button onclick="testDirectFetch()">Test Direct Fetch</button>
+    <button onclick="testWithCORS()">Test with CORS Headers</button>
+    <button onclick="testAllStocks()">Test All Stocks</button>
+    
+    <div id="results"></div>
+
+    <script>
+        document.getElementById('current-url').textContent = window.location.origin;
+        const API_BASE = 'http://localhost:8000';
+        
+        function addResult(message, type = 'loading') {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = `result ${type}`;
+            div.innerHTML = `<strong>${new Date().toLocaleTimeString()}</strong>: ${message}`;
+            results.appendChild(div);
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+        
+        async function testDirectFetch() {
+            addResult('Testing direct fetch to backend API...', 'loading');
+            
+            try {
+                const response = await fetch(`${API_BASE}/data/realtime/000001.SZ`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                console.log('Response object:', response);
+                addResult(`Response status: ${response.status} ${response.statusText}`, 'loading');
+                
+                const data = await response.json();
+                console.log('Response data:', data);
+                
+                if (response.ok && data.success) {
+                    addResult(`✅ SUCCESS: ${data.data.name} - ¥${data.data.current_price}`, 'success');
+                    addResult(`<pre>${JSON.stringify(data, null, 2)}</pre>`, 'success');
+                } else {
+                    addResult(`❌ API Error: ${data.message || 'Unknown error'}`, 'error');
+                    addResult(`<pre>${JSON.stringify(data, null, 2)}</pre>`, 'error');
+                }
+            } catch (error) {
+                addResult(`❌ Network Error: ${error.message}`, 'error');
+                console.error('Fetch error:', error);
+            }
+        }
+        
+        async function testWithCORS() {
+            addResult('Testing with explicit CORS headers...', 'loading');
+            
+            try {
+                const response = await fetch(`${API_BASE}/data/realtime/000002.SZ`, {
+                    method: 'GET',
+                    mode: 'cors',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'Origin': window.location.origin
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    addResult(`✅ CORS Test SUCCESS: ${data.data.name} - ¥${data.data.current_price}`, 'success');
+                } else {
+                    addResult(`❌ CORS Test Failed: ${data.message || 'Unknown error'}`, 'error');
+                }
+            } catch (error) {
+                addResult(`❌ CORS Error: ${error.message}`, 'error');
+                console.error('CORS test error:', error);
+            }
+        }
+        
+        async function testAllStocks() {
+            addResult('Testing all stocks...', 'loading');
+            const symbols = ['000001.SZ', '000002.SZ', '600000.SH', '600036.SH'];
+            
+            for (const symbol of symbols) {
+                try {
+                    addResult(`Testing ${symbol}...`, 'loading');
+                    const response = await fetch(`${API_BASE}/data/realtime/${symbol}`);
+                    const data = await response.json();
+                    
+                    if (response.ok && data.success) {
+                        addResult(`✅ ${symbol}: ${data.data.name} - ¥${data.data.current_price}`, 'success');
+                    } else {
+                        addResult(`❌ ${symbol}: ${data.message || 'Failed'}`, 'error');
+                    }
+                } catch (error) {
+                    addResult(`❌ ${symbol}: ${error.message}`, 'error');
+                }
+            }
+        }
+        
+        // Auto-run basic test on page load
+        window.onload = () => {
+            addResult('Page loaded, starting auto-test...', 'loading');
+            setTimeout(testDirectFetch, 1000);
+        };
+    </script>
+</body>
+</html>

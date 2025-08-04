@@ -134,7 +134,13 @@ class DataModule(ModuleInterface):
             from datetime import date, timedelta
             end_date = date.today()
             start_date = end_date - timedelta(days=30)  # 默认获取30天数据
+            
+            # 只尝试获取真实数据，不使用模拟数据
             data = self.data_manager.get_price_data(symbol, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
+            
+            # 如果没有数据，抛出异常
+            if data.empty:
+                raise Exception(f"无法获取 {symbol} 的真实市场数据")
             
             # 更新缓存
             self.market_data_cache[cache_key] = {
@@ -262,11 +268,14 @@ class ExecutionModule(ModuleInterface):
     async def create_order(self, signal: Dict[str, Any]) -> str:
         """创建订单"""
         try:
-            order = self.order_manager.create_order_from_signal(signal)
-            order_id = self.order_manager.create_order(order)
+            # Create order from signal (this returns order_id)
+            order_id = self.order_manager.create_order_from_signal(signal)
+            
+            # Get the order details for execution queue
+            order = self.order_manager.orders.get(order_id)
             
             # 添加到执行队列
-            if self.execution_queue is not None:
+            if self.execution_queue is not None and order:
                 await self.execution_queue.put((order_id, order))
             
             self.metrics['orders_created'] = self.metrics.get('orders_created', 0) + 1

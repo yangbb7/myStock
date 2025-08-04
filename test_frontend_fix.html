@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Frontend API Connection</title>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <h1>前端API连接测试</h1>
+    <div id="results"></div>
+    
+    <script>
+        console.log('🧪 Testing frontend API connection...');
+        
+        async function testStockAPI() {
+            const resultsDiv = document.getElementById('results');
+            const symbols = ['000001.SZ', '000002.SZ', '600000.SH', '600036.SH'];
+            
+            resultsDiv.innerHTML = '<h2>测试结果:</h2>';
+            
+            for (const symbol of symbols) {
+                try {
+                    console.log(`📡 Testing ${symbol}...`);
+                    const response = await axios.get(`http://localhost:8000/data/realtime/${symbol}`);
+                    
+                    if (response.data && response.data.success) {
+                        const { current_price, name, source } = response.data.data;
+                        resultsDiv.innerHTML += `
+                            <div style="color: green; margin: 10px 0;">
+                                ✅ ${symbol} (${name}): ¥${current_price} - ${source}
+                            </div>
+                        `;
+                        console.log(`✅ ${symbol}: ¥${current_price}`);
+                    } else {
+                        throw new Error('Invalid response format');
+                    }
+                } catch (error) {
+                    resultsDiv.innerHTML += `
+                        <div style="color: red; margin: 10px 0;">
+                            ❌ ${symbol}: ${error.message}
+                        </div>
+                    `;
+                    console.error(`❌ ${symbol}:`, error);
+                }
+            }
+        }
+        
+        // Run test immediately
+        testStockAPI();
+    </script>
+</body>
+</html>

@@ -3,9 +3,12 @@
 Positions - 持仓相关数据模型
 """
 
-from datetime import datetime
+import re
+from datetime import datetime, timezone
+from decimal import Decimal
 from enum import Enum
 from typing import Any, Dict, Optional
+from dataclasses import dataclass
 
 
 class PositionSide(Enum):
@@ -15,40 +18,172 @@ class PositionSide(Enum):
     SHORT = "SHORT"  # 空头
 
 
+class PositionStatus(str, Enum):
+    """持仓状态"""
+    ACTIVE = "ACTIVE"      # 活跃
+    CLOSED = "CLOSED"      # 已平仓
+    SUSPENDED = "SUSPENDED"  # 暂停
+
+
 class Position:
     """持仓基础类"""
 
-    def __init__(self, symbol: str, side: PositionSide = PositionSide.LONG):
+    def __init__(
+        self, 
+        user_id: int,
+        symbol: str, 
+        quantity: int,
+        average_price: Optional[Decimal] = None,
+        avg_cost: Optional[Decimal] = None,  # 兼容参数
+        side: PositionSide = PositionSide.LONG,
+        status: PositionStatus = PositionStatus.ACTIVE
+    ):
+        self.user_id = user_id
         self.symbol = symbol
+        self.quantity = quantity
+        # 支持两种参数名
+        self.average_price = average_price or avg_cost or Decimal('0')
+        self.avg_cost = self.average_price  # 别名，兼容旧代码
         self.side = side
-
-        # 数量和成本
+        self.status = status
+        self.realized_pnl = Decimal('0')
+        self.created_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(timezone.utc)
+        
+        # 验证数据
+        self._validate_position()
+    
+    def _validate_position(self):
+        """持仓验证"""
+        # 验证股票代码格式
+        if not re.match(r'^[0-9]{6}\.(SZ|SH)$', self.symbol):
+            raise ValueError(f'Invalid symbol format: {self.symbol}')
+        
+        # 验证数量
+        if self.quantity < 0:
+            raise ValueError('Quantity cannot be negative')
+        
+        # 验证平均价格
+        if self.average_price <= 0:
+            raise ValueError('Average price must be positive')
+    
+    def calculate_market_value(self, current_price: Decimal) -> Decimal:
+        """计算市值
+        
+        Args:
+            current_price: 当前价格
+            
+        Returns:
+            Decimal: 市值
+        """
+        return current_price * self.quantity
+    
+    def calculate_unrealized_pnl(self, current_price: Decimal) -> Decimal:
+        """计算未实现盈亏
+        
+        Args:
+            current_price: 当前价格
+            
+        Returns:
+            Decimal: 未实现盈亏
+        """
+        return (current_price - self.average_price) * self.quantity
+    
+    def calculate_percentage(self, current_price: Decimal, total_portfolio_value: Decimal) -> Decimal:
+        """计算持仓比例
+        
+        Args:
+            current_price: 当前价格
+            total_portfolio_value: 投资组合总价值
+            
+        Returns:
+            Decimal: 持仓比例（百分比）
+        """
+        if total_portfolio_value == 0:
+            return Decimal('0')
+        
+        market_value = self.calculate_market_value(current_price)
+        return (market_value / total_portfolio_value * 100).quantize(Decimal('0.01'))
+    
+    def get_market_value(self) -> Decimal:
+        """获取市值（使用平均价格）
+        
+        Returns:
+            Decimal: 市值
+        """
+        return self.calculate_market_value(self.average_price)
+    
+    def update_position(self, quantity_change: int, price: Decimal) -> bool:
+        """更新持仓
+        
+        Args:
+            quantity_change: 数量变化（正数为增加，负数为减少）
+            price: 交易价格
+            
+        Returns:
+            bool: 更新是否成功
+        """
+        if quantity_change == 0:
+            return True
+        
+        new_quantity = self.quantity + quantity_change
+        
+        # 检查是否会导致负数量
+        if new_quantity < 0:
+            return False
+        
+        # 如果是增加持仓，更新平均成本
+        if quantity_change > 0:
+            total_cost = self.average_price * self.quantity + price * quantity_change
+            self.quantity = new_quantity
+            self.average_price = total_cost / self.quantity
+        else:
+            # 如果是减少持仓，不更新平均成本，但记录实现盈亏
+            realized_pnl_change = (price - self.average_price) * abs(quantity_change)
+            self.realized_pnl += realized_pnl_change
+            self.quantity = new_quantity
+        
+        # 如果数量为0，标记为已平仓
+        if self.quantity == 0:
+            self.status = PositionStatus.CLOSED
+        
+        self.updated_at = datetime.now(timezone.utc)
+        return True
+    
+    def close(self, close_price: Decimal) -> bool:
+        """平仓
+        
+        Args:
+            close_price: 平仓价格
+            
+        Returns:
+            bool: 平仓是否成功
+        """
+        if self.status != PositionStatus.ACTIVE or self.quantity == 0:
+            return False
+        
+        # 计算实现盈亏
+        self.realized_pnl = (close_price - self.average_price) * self.quantity
+        
+        # 更新状态
         self.quantity = 0
-        self.avg_cost = 0.0
-        self.total_cost = 0.0
-
-        # 当前价格和市值
-        self.current_price = 0.0
-        self.market_value = 0.0
-
-        # 盈亏
-        self.unrealized_pnl = 0.0
-        self.realized_pnl = 0.0
-        self.total_pnl = 0.0
-
-        # 时间信息
-        self.first_trade_time = None
-        self.last_trade_time = None
-        self.last_update_time = datetime.now()
-
-        # 统计信息
-        self.trade_count = 0
-        self.total_commission = 0.0
-
-        # 额外信息
-        self.sector = "Unknown"
-        self.weight = 0.0
-        self.metadata: Dict[str, Any] = {}
+        self.status = PositionStatus.CLOSED
+        self.updated_at = datetime.now(timezone.utc)
+        
+        return True
+    
+    def to_dict(self) -> dict:
+        """转换为字典"""
+        return {
+            'user_id': self.user_id,
+            'symbol': self.symbol,
+            'quantity': self.quantity,
+            'average_price': float(self.average_price),
+            'status': self.status.value,
+            'realized_pnl': float(self.realized_pnl),
+            'created_at': self.created_at.isoformat(),
+            'updated_at': self.updated_at.isoformat()
+        }
 
     def add_trade(
         self,

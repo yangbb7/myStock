@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>前端API调用测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 4px; }
+        .success { color: green; background: #f0f8f0; padding: 10px; margin: 5px 0; }
+        .error { color: red; background: #fdf0f0; padding: 10px; margin: 5px 0; }
+        .loading { color: blue; background: #f0f0fd; padding: 10px; margin: 5px 0; }
+        .info { color: #333; background: #f8f8f8; padding: 10px; margin: 5px 0; }
+        pre { background: #f5f5f5; padding: 10px; overflow-x: auto; font-size: 12px; }
+        button { padding: 12px 24px; margin: 5px; background: #1890ff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #40a9ff; }
+        .status-good { color: green; font-weight: bold; }
+        .status-bad { color: red; font-weight: bold; }
+        .table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+        .table th, .table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        .table th { background: #f2f2f2; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 前端API调用测试</h1>
+        <p>模拟前端RealDataValidator组件的完整API调用流程</p>
+        
+        <div class="test-section">
+            <h2>🏥 后端服务连接测试</h2>
+            <button onclick="testBackendConnection()">测试后端连接</button>
+            <div id="backend-result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h2>📡 API方法测试</h2>
+            <button onclick="testAPIMethod()">测试API方法调用</button>
+            <div id="api-result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h2>📊 股票数据测试</h2>
+            <button onclick="testStockData()">测试所有股票数据</button>
+            <div id="stock-result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h2>📋 测试结果总览</h2>
+            <div id="summary-result"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:8000';
+        const testSymbols = ['000001.SZ', '000002.SZ', '600000.SH', '600036.SH'];
+        
+        function log(elementId, message, className = 'info') {
+            const element = document.getElementById(elementId);
+            const time = new Date().toLocaleTimeString();
+            element.innerHTML += `<div class="${className}">[${time}] ${message}</div>`;
+            console.log(`[${time}] ${message}`);
+        }
+        
+        function clearLog(elementId) {
+            document.getElementById(elementId).innerHTML = '';
+        }
+        
+        // 模拟前端的axios请求（简化版）
+        async function mockAxiosRequest(url, options = {}) {
+            console.log(`[Mock Axios] Request to: ${url}`);
+            
+            // 模拟请求拦截器
+            const publicEndpoints = ['/health', '/data/realtime', '/data/market', '/data/symbols'];
+            const isPublicEndpoint = publicEndpoints.some(endpoint => url.includes(endpoint));
+            
+            if (isPublicEndpoint) {
+                console.log(`[Mock Axios] Public endpoint - skipping auth: ${url}`);
+            } else {
+                console.log(`[Mock Axios] Private endpoint - would require auth: ${url}`);
+            }
+            
+            try {
+                const response = await fetch(url, {
+                    method: options.method || 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        ...options.headers
+                    },
+                    ...options
+                });
+                
+                console.log(`[Mock Axios] Response status: ${response.status}`);
+                
+                const data = await response.json();
+                console.log(`[Mock Axios] Response data:`, data);
+                
+                // 模拟axios的响应格式化
+                return {
+                    data: data,
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: response.headers
+                };
+                
+            } catch (error) {
+                console.error(`[Mock Axios] Request failed:`, error);
+                throw error;
+            }
+        }
+        
+        // 模拟前端api.data.getRealTimePrice方法
+        async function mockGetRealTimePrice(symbol) {
+            console.log(`[Mock API] getRealTimePrice(${symbol})`);
+            
+            const response = await mockAxiosRequest(`${API_BASE_URL}/data/realtime/${symbol}`);
+            
+            // formatApiResponse函数的逻辑
+            const formattedResponse = response.data;
+            console.log(`[Mock API] Formatted response:`, formattedResponse);
+            
+            return formattedResponse;
+        }
+        
+        // 模拟前端组件的testSingleStock方法
+        async function mockTestSingleStock(symbol) {
+            const startTime = Date.now();
+            
+            try {
+                console.log(`🔍 [Mock Component] Testing ${symbol}...`);
+                
+                console.log(`📡 [Mock Component] Calling api.data.getRealTimePrice(${symbol})`);
+                const response = await mockGetRealTimePrice(symbol);
+                const latency = Date.now() - startTime;
+                
+                console.log(`📨 [Mock Component] Response for ${symbol}:`, response);
+                console.log(`⏱️ [Mock Component] Latency: ${latency}ms`);
+                
+                if (response && response.success !== false) {
+                    const stockData = response;
+                    let current_price = 0;
+                    
+                    console.log(`🔍 [Mock Component] Processing response data:`, {
+                        hasData: !!stockData.data,
+                        hasCurrentPrice: !!(stockData.data && stockData.data.current_price),
+                        success: stockData.success
+                    });
+                    
+                    // 直接从实时API响应中获取价格
+                    if (stockData.data && stockData.data.current_price) {
+                        current_price = stockData.data.current_price;
+                        console.log(`💰 [Mock Component] Found price for ${symbol}: ¥${current_price}`);
+                        
+                        return {
+                            name: symbol,
+                            status: 'success',
+                            data: {
+                                symbol,
+                                name: stockData.data.name || symbol,
+                                current_price,
+                                timestamp: new Date().toISOString(),
+                                source: 'EastMoney API'
+                            },
+                            latency
+                        };
+                    } else {
+                        console.error(`❌ [Mock Component] No price data found for ${symbol}`, stockData);
+                        return {
+                            name: symbol,
+                            status: 'error',
+                            error: 'No price data found',
+                            latency
+                        };
+                    }
+                } else {
+                    const errorMsg = response?.message || 'No data received';
+                    console.error(`❌ [Mock Component] Invalid response for ${symbol}:`, response);
+                    return {
+                        name: symbol,
+                        status: 'error',
+                        error: errorMsg,
+                        latency
+                    };
+                }
+                
+            } catch (error) {
+                const latency = Date.now() - startTime;
+                console.error(`💥 [Mock Component] Exception for ${symbol}:`, error);
+                
+                return {
+                    name: symbol,
+                    status: 'error',
+                    error: error.message,
+                    latency
+                };
+            }
+        }
+        
+        async function testBackendConnection() {
+            clearLog('backend-result');
+            log('backend-result', '正在测试后端连接...', 'loading');
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/health`);
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    log('backend-result', '✅ 后端服务连接正常', 'success');
+                    log('backend-result', `消息: ${data.message}`, 'info');
+                } else {
+                    log('backend-result', '❌ 后端服务响应异常', 'error');
+                    log('backend-result', `<pre>${JSON.stringify(data, null, 2)}</pre>`, 'error');
+                }
+            } catch (error) {
+                log('backend-result', `❌ 后端连接失败: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testAPIMethod() {
+            clearLog('api-result');
+            log('api-result', '正在测试API方法调用...', 'loading');
+            
+            try {
+                const symbol = '000001.SZ';
+                const result = await mockGetRealTimePrice(symbol);
+                
+                log('api-result', `✅ API方法调用成功`, 'success');
+                log('api-result', `<pre>${JSON.stringify(result, null, 2)}</pre>`, 'info');
+                
+                if (result && result.data && result.data.current_price) {
+                    log('api-result', `💰 价格数据: ¥${result.data.current_price}`, 'success');
+                } else {
+                    log('api-result', `⚠️ 价格数据结构异常`, 'error');
+                }
+                
+            } catch (error) {
+                log('api-result', `❌ API方法调用失败: ${error.message}`, 'error');
+                console.error('API method test error:', error);
+            }
+        }
+        
+        async function testStockData() {
+            clearLog('stock-result');
+            log('stock-result', '正在测试所有股票数据...', 'loading');
+            
+            const results = [];
+            
+            for (const symbol of testSymbols) {
+                log('stock-result', `测试 ${symbol}...`, 'loading');
+                const result = await mockTestSingleStock(symbol);
+                results.push(result);
+                
+                if (result.status === 'success') {
+                    log('stock-result', `✅ ${symbol}: ${result.data.name} - ¥${result.data.current_price} (${result.latency}ms)`, 'success');
+                } else {
+                    log('stock-result', `❌ ${symbol}: ${result.error} (${result.latency}ms)`, 'error');
+                }
+            }
+            
+            // 生成汇总
+            const successCount = results.filter(r => r.status === 'success').length;
+            const totalCount = results.length;
+            
+            log('stock-result', ``, 'info');
+            log('stock-result', `📊 测试汇总: ${successCount}/${totalCount} 成功`, 
+                successCount === totalCount ? 'success' : 'error');
+            
+            // 更新总览
+            updateSummary(results);
+        }
+        
+        function updateSummary(results) {
+            const summaryElement = document.getElementById('summary-result');
+            const successCount = results.filter(r => r.status === 'success').length;
+            const totalCount = results.length;
+            
+            let tableHTML = `
+                <h3>📊 测试结果汇总</h3>
+                <p><span class="${successCount === totalCount ? 'status-good' : 'status-bad'}">
+                    成功率: ${successCount}/${totalCount} (${(successCount/totalCount*100).toFixed(1)}%)
+                </span></p>
+                <table class="table">
+                    <tr>
+                        <th>股票代码</th>
+                        <th>状态</th>
+                        <th>价格</th>
+                        <th>响应时间</th>
+                        <th>错误信息</th>
+                    </tr>
+            `;
+            
+            results.forEach(result => {
+                const statusClass = result.status === 'success' ? 'status-good' : 'status-bad';
+                const price = result.status === 'success' ? `¥${result.data.current_price}` : '-';
+                const error = result.status === 'error' ? result.error : '-';
+                
+                tableHTML += `
+                    <tr>
+                        <td>${result.name}</td>
+                        <td class="${statusClass}">${result.status === 'success' ? '正常' : '异常'}</td>
+                        <td>${price}</td>
+                        <td>${result.latency}ms</td>
+                        <td>${error}</td>
+                    </tr>
+                `;
+            });
+            
+            tableHTML += '</table>';
+            
+            if (successCount === totalCount) {
+                tableHTML += `
+                    <div class="success">
+                        🎉 所有测试通过！如果前端仍显示异常，请检查：
+                        <ul>
+                            <li>浏览器缓存 - 硬刷新页面 (Ctrl+Shift+R)</li>
+                            <li>浏览器控制台 - 查看具体错误信息</li>
+                            <li>网络面板 - 检查API请求是否成功</li>
+                        </ul>
+                    </div>
+                `;
+            } else {
+                tableHTML += `
+                    <div class="error">
+                        ❌ 部分测试失败，这解释了为什么前端显示异常状态
+                    </div>
+                `;
+            }
+            
+            summaryElement.innerHTML = tableHTML;
+        }
+        
+        // 页面加载时自动测试连接
+        window.onload = function() {
+            console.log('页面加载完成，开始自动测试');
+            testBackendConnection();
+        };
+    </script>
+</body>
+</html>

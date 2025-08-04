@@ -411,27 +411,68 @@ class PerformanceAnalyzer:
             raise DataException("Insufficient data: need at least 2 data points")
         return self.performance_metrics.calculate_returns(portfolio_values)
 
+    def calculate_total_return(self, returns):
+        """计算总收益率"""
+        if isinstance(returns, (list, np.ndarray)):
+            returns = pd.Series(returns)
+        elif not isinstance(returns, pd.Series):
+            returns = pd.Series(returns)
+        
+        cumulative_return = (1 + returns).prod() - 1
+        return cumulative_return
+
+    def calculate_annualized_return(self, returns, periods_per_year=252):
+        """计算年化收益率"""
+        if isinstance(returns, (list, np.ndarray)):
+            returns = pd.Series(returns)
+        elif not isinstance(returns, pd.Series):
+            returns = pd.Series(returns)
+        
+        total_return = self.calculate_total_return(returns)
+        periods = len(returns)
+        if periods == 0:
+            return 0.0
+        annualized = (1 + total_return) ** (periods_per_year / periods) - 1
+        return annualized
+
     def calculate_volatility(
-        self, returns: pd.Series, annualize: bool = False, handle_nan: bool = False
+        self, returns: pd.Series, annualize: bool = False, handle_nan: bool = False, periods_per_year: int = None
     ) -> float:
         """计算波动率"""
+        if isinstance(returns, (list, np.ndarray)):
+            returns = pd.Series(returns)
+        elif not isinstance(returns, pd.Series):
+            returns = pd.Series(returns)
+            
         if handle_nan:
             returns = returns.dropna()
+        
+        if periods_per_year is not None:
+            volatility = returns.std() * np.sqrt(periods_per_year)
+            return volatility
         return self.performance_metrics.calculate_volatility(returns, annualize)
 
     def calculate_sharpe_ratio(
-        self, returns: pd.Series, handle_nan: bool = False
+        self, returns, risk_free_rate=None, handle_nan: bool = False
     ) -> float:
         """计算夏普比率"""
+        if isinstance(returns, (list, np.ndarray)):
+            returns = pd.Series(returns)
+        elif not isinstance(returns, pd.Series):
+            returns = pd.Series(returns)
+            
         if handle_nan:
             returns = returns.dropna()
+
+        if risk_free_rate is None:
+            risk_free_rate = self.risk_free_rate
 
         # 检查零波动率情况（或接近零）
         volatility = returns.std()
         if volatility == 0 or volatility < 1e-10:  # 检查真正的零或极小值
-            if returns.mean() > self.risk_free_rate / self.trading_days_per_year:
+            if returns.mean() > risk_free_rate / self.trading_days_per_year:
                 return float("inf")
-            elif returns.mean() < self.risk_free_rate / self.trading_days_per_year:
+            elif returns.mean() < risk_free_rate / self.trading_days_per_year:
                 return float("-inf")
             else:
                 return float("nan")
@@ -442,9 +483,16 @@ class PerformanceAnalyzer:
         """计算索提诺比率"""
         return self.performance_metrics.calculate_sortino_ratio(returns)
 
-    def calculate_max_drawdown(self, portfolio_values: pd.Series) -> Dict[str, Any]:
+    def calculate_max_drawdown(self, portfolio_values):
         """计算最大回撤"""
-        return self.risk_metrics.calculate_max_drawdown(portfolio_values)
+        if isinstance(portfolio_values, list):
+            portfolio_values = pd.Series(portfolio_values)
+        elif not isinstance(portfolio_values, pd.Series):
+            portfolio_values = pd.Series(portfolio_values)
+            
+        result = self.risk_metrics.calculate_max_drawdown(portfolio_values)
+        # 返回字典格式，与其他方法保持一致
+        return result
 
     def calculate_var(
         self,
@@ -458,6 +506,33 @@ class PerformanceAnalyzer:
                 "Insufficient data: need at least 10 data points for VaR calculation"
             )
         return self.risk_metrics.calculate_var(returns, confidence_level, method)
+
+    def calculate_expected_shortfall(self, returns, confidence_level: float = 0.95) -> float:
+        """计算期望损失(ES/CVaR)"""
+        if isinstance(returns, (list, np.ndarray)):
+            returns = pd.Series(returns)
+        elif not isinstance(returns, pd.Series):
+            returns = pd.Series(returns)
+            
+        return self.risk_metrics.calculate_cvar(returns, confidence_level)
+
+    def calculate_beta(self, portfolio_returns, benchmark_returns) -> float:
+        """计算Beta系数"""
+        if isinstance(portfolio_returns, list):
+            portfolio_returns = pd.Series(portfolio_returns)
+        if isinstance(benchmark_returns, list):
+            benchmark_returns = pd.Series(benchmark_returns)
+            
+        return self.benchmark_analysis.calculate_beta(portfolio_returns, benchmark_returns)
+
+    def calculate_alpha(self, portfolio_returns, benchmark_returns, risk_free_rate) -> float:
+        """计算Alpha"""
+        if isinstance(portfolio_returns, list):
+            portfolio_returns = pd.Series(portfolio_returns)
+        if isinstance(benchmark_returns, list):
+            benchmark_returns = pd.Series(benchmark_returns)
+            
+        return self.benchmark_analysis.calculate_alpha(portfolio_returns, benchmark_returns, risk_free_rate)
 
     def calculate_cvar(
         self, returns: pd.Series, confidence_level: float = 0.95
@@ -482,9 +557,14 @@ class PerformanceAnalyzer:
         return alpha, beta
 
     def calculate_information_ratio(
-        self, portfolio_returns: pd.Series, benchmark_returns: pd.Series
+        self, portfolio_returns, benchmark_returns
     ) -> float:
         """计算信息比率"""
+        if isinstance(portfolio_returns, list):
+            portfolio_returns = pd.Series(portfolio_returns)
+        if isinstance(benchmark_returns, list):
+            benchmark_returns = pd.Series(benchmark_returns)
+            
         if len(portfolio_returns) != len(benchmark_returns):
             raise DataException(
                 "Length mismatch: portfolio and benchmark returns must have same length"
@@ -583,9 +663,14 @@ class PerformanceAnalyzer:
         }
 
     def calculate_tracking_error(
-        self, portfolio_returns: pd.Series, benchmark_returns: pd.Series
+        self, portfolio_returns, benchmark_returns
     ) -> float:
         """计算跟踪误差"""
+        if isinstance(portfolio_returns, list):
+            portfolio_returns = pd.Series(portfolio_returns)
+        if isinstance(benchmark_returns, list):
+            benchmark_returns = pd.Series(benchmark_returns)
+            
         if len(portfolio_returns) != len(benchmark_returns):
             raise DataException(
                 "Length mismatch: portfolio and benchmark returns must have same length"

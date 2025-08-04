@@ -1,0 +1,70 @@
+2025-08-02 16:58:16 - myQuant - INFO - myQuant v1.0.0 日志系统已启动
+2025-08-02 16:58:17 - myQuant.core.events.event_bus - INFO - 事件总线初始化完成
+2025-08-02 16:58:17 - myQuant.infrastructure.data.providers.real_data_provider - INFO - Yahoo Finance初始化成功
+2025-08-02 16:58:17 - myQuant.infrastructure.data.providers.real_data_provider - INFO - Yahoo Finance提供者初始化成功
+2025-08-02 16:58:17 - myQuant.infrastructure.data.providers.real_data_provider - INFO - 东方财富提供者初始化成功
+2025-08-02 16:58:17 - myQuant.infrastructure.data.fallback_manager - INFO - 注册数据源: yahoo, 优先级: 3
+2025-08-02 16:58:17 - myQuant.infrastructure.data.fallback_manager - INFO - 注册数据源: eastmoney, 优先级: 4
+2025-08-02 16:58:17 - myQuant.infrastructure.data.providers.real_data_provider - INFO - 已注册2个数据源
+2025-08-02 16:58:17 - myQuant.core.managers.data_manager - INFO - 真实数据提供者初始化成功
+2025-08-02 16:58:17 - myQuant.core.events.event_bus - INFO - 事件总线初始化完成
+2025-08-02 16:58:17 - myQuant.core.analysis.performance_analyzer - INFO - 绩效分析器初始化完成
+2025-08-02 16:58:17 - myQuant.infrastructure.data.providers.real_data_provider - INFO - Yahoo Finance初始化成功
+2025-08-02 16:58:17 - myQuant.infrastructure.data.providers.real_data_provider - INFO - Yahoo Finance提供者初始化成功
+2025-08-02 16:58:17 - myQuant.infrastructure.data.providers.real_data_provider - INFO - 东方财富提供者初始化成功
+2025-08-02 16:58:17 - myQuant.infrastructure.data.fallback_manager - INFO - 注册数据源: yahoo, 优先级: 3
+2025-08-02 16:58:17 - myQuant.infrastructure.data.fallback_manager - INFO - 注册数据源: eastmoney, 优先级: 4
+2025-08-02 16:58:17 - myQuant.infrastructure.data.providers.real_data_provider - INFO - 已注册2个数据源
+2025-08-02 16:58:17 - myQuant.interfaces.api.websocket_manager - INFO - 真实数据提供者初始化成功
+2025-08-02 16:58:18 - myQuant.core.analysis.performance_analyzer - INFO - 绩效分析器初始化完成
+2025-08-02 16:58:18 - myQuant - INFO - myQuant v1.0.0 日志系统已启动
+2025-08-02 16:58:18 - myQuant - INFO - myQuant v1.0.0 日志系统已启动
+🎯 myQuant - 量化交易系统
+版本: 1.0.0
+==================================================
+🎯 myQuant v1.0.0 交互式模式
+==================================================
+
+请选择操作:
+1. 运行回测
+2. 运行异步数据引擎
+3. 运行实时交易
+4. 启动API服务器 (开发模式)
+5. 启动API服务器 (生产模式)
+6. 查看系统状态
+0. 退出
+
+请输入选择 (0-6): 🌐 启动API服务器 (开发模式)...
+2025-08-02 16:58:18 - myQuant.core.events.event_bus - INFO - 事件总线初始化完成
+2025-08-02 16:58:18 - myQuant.infrastructure.data.providers.real_data_provider - INFO - Yahoo Finance初始化成功
+2025-08-02 16:58:18 - myQuant.infrastructure.data.providers.real_data_provider - INFO - Yahoo Finance提供者初始化成功
+2025-08-02 16:58:18 - myQuant.infrastructure.data.providers.real_data_provider - INFO - 东方财富提供者初始化成功
+2025-08-02 16:58:18 - myQuant.infrastructure.data.fallback_manager - INFO - 注册数据源: yahoo, 优先级: 3
+2025-08-02 16:58:18 - myQuant.infrastructure.data.fallback_manager - INFO - 注册数据源: eastmoney, 优先级: 4
+2025-08-02 16:58:18 - myQuant.infrastructure.data.providers.real_data_provider - INFO - 已注册2个数据源
+2025-08-02 16:58:18 - myQuant.core.managers.data_manager - INFO - 真实数据提供者初始化成功
+2025-08-02 16:58:18 - myQuant.core.analysis.performance_analyzer - INFO - 绩效分析器初始化完成
+2025-08-02 16:58:18 - myQuant.infrastructure.data.providers.real_data_provider - INFO - Yahoo Finance初始化成功
+2025-08-02 16:58:18 - myQuant.infrastructure.data.providers.real_data_provider - INFO - Yahoo Finance提供者初始化成功
+2025-08-02 16:58:18 - myQuant.infrastructure.data.providers.real_data_provider - INFO - 东方财富提供者初始化成功
+2025-08-02 16:58:18 - myQuant.infrastructure.data.fallback_manager - INFO - 注册数据源: yahoo, 优先级: 3
+2025-08-02 16:58:18 - myQuant.infrastructure.data.fallback_manager - INFO - 注册数据源: eastmoney, 优先级: 4
+2025-08-02 16:58:18 - myQuant.infrastructure.data.providers.real_data_provider - INFO - 已注册2个数据源
+2025-08-02 16:58:18 - myQuant.interfaces.api.websocket_manager - INFO - 真实数据提供者初始化成功
+✅ API服务器配置完成
+🌐 访问地址: http://localhost:8000
+📚 API文档: http://localhost:8000/docs
+按 Ctrl+C 停止服务器
+2025-08-02 16:58:18 - myQuant.interfaces.api.monolith_api - INFO - Starting API server on 0.0.0.0:8000
+INFO:     Started server process [22654]
+INFO:     Waiting for application startup.
+2025-08-02 16:58:18 - myQuant.interfaces.api.websocket_manager - INFO - Starting WebSocket background tasks...
+2025-08-02 16:58:18 - myQuant.interfaces.api.websocket_manager - INFO - System status task started
+2025-08-02 16:58:18 - myQuant.interfaces.api.websocket_manager - INFO - Market data simulation task started
+2025-08-02 16:58:18 - myQuant.interfaces.api.monolith_api - INFO - WebSocket manager started
+2025-08-02 16:58:18 - myQuant.interfaces.api.websocket_manager - INFO - Market data simulation task started running
+INFO:     Application startup complete.
+ERROR:    [Errno 48] error while attempting to bind on address ('0.0.0.0', 8000): [errno 48] address already in use
+INFO:     Waiting for application shutdown.
+2025-08-02 16:58:18 - myQuant.interfaces.api.monolith_api - INFO - WebSocket manager stopped
+INFO:     Application shutdown complete.

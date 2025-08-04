@@ -12,16 +12,16 @@ import sys
 import os
 
 # 添加项目路径
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'myQuant'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from core.managers.data_manager import DataManager
-from core.engines.strategy_engine import StrategyEngine
-from core.engines.backtest_engine import BacktestEngine
-from core.managers.risk_manager import RiskManager
-from core.managers.portfolio_manager import PortfolioManager
-from core.managers.order_manager import OrderManager
-from core.analysis.performance_analyzer import PerformanceAnalyzer
-from core.trading_system import TradingSystem
+from myQuant.core.managers.risk_manager import RiskManager
+from myQuant.core.managers.portfolio_manager import PortfolioManager
+from myQuant.core.managers.order_manager import OrderManager
+from myQuant.core.managers.data_manager import DataManager
+from myQuant.core.engines.strategy_engine import StrategyEngine
+from myQuant.core.engines.backtest_engine import BacktestEngine
+from myQuant.core.analysis.performance_analyzer import PerformanceAnalyzer
+from myQuant.core.trading_system import TradingSystem
 
 # 导入真实数据fixtures
 from tests.fixtures.real_data_fixtures import (
@@ -250,6 +250,14 @@ class TestRealDataIntegration:
         else:
             max_drawdown_value = max_drawdown
             
+        # 确保是数值类型，处理numpy类型和元组等情况
+        if hasattr(max_drawdown_value, 'item'):  # numpy类型
+            max_drawdown_value = max_drawdown_value.item()
+        elif isinstance(max_drawdown_value, (tuple, list)):  # 元组或列表
+            max_drawdown_value = float(max_drawdown_value[0]) if len(max_drawdown_value) > 0 else 0.0
+        else:
+            max_drawdown_value = float(max_drawdown_value)
+            
         assert isinstance(max_drawdown_value, (int, float))
         assert -1.0 <= max_drawdown_value <= 0.0
         
@@ -276,7 +284,7 @@ class TestRealDataIntegration:
         trading_system = TradingSystem(real_data_config)
         
         # 创建基于真实价格的策略
-        from core.strategy_engine import MAStrategy
+        from myQuant.core.strategy_engine import MAStrategy
         real_strategy = MAStrategy("RealMAStrategy", real_stock_symbols[:2], {"ma_period": 5})
         trading_system.add_strategy(real_strategy)
         

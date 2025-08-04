@@ -136,9 +136,9 @@ class PerformanceSettings(BaseSettings):
 class DataSettings(BaseSettings):
     """数据配置"""
 
-    # 数据源配置
-    primary_source: DataSource = DataSource.MOCK
-    fallback_sources: List[DataSource] = [DataSource.MOCK]
+    # 数据源配置 - 优先使用真实数据源，移除Mock数据源
+    primary_source: DataSource = DataSource.TUSHARE
+    fallback_sources: List[DataSource] = [DataSource.YAHOO, DataSource.EMQUANT]
 
     # 数据获取配置
     max_retries: int = Field(3, ge=0, le=10)
@@ -152,6 +152,14 @@ class DataSettings(BaseSettings):
     # 实时数据配置
     realtime_update_interval: int = Field(60, ge=1, le=3600)  # 秒
     price_tolerance: float = Field(0.05, ge=0.0, le=1.0)
+    
+    # 券商API集成配置
+    enable_broker_realtime: bool = Field(True, description="启用券商实时数据")
+    broker_apis: Dict[str, Any] = Field(default_factory=dict, description="券商API配置")
+    
+    # 数据验证配置
+    enable_data_validation: bool = Field(True, description="启用数据质量验证")
+    data_freshness_threshold: int = Field(300, ge=60, le=3600, description="数据新鲜度阈值(秒)")
 
 
 class TradingSettings(BaseSettings):

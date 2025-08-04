@@ -11,7 +11,7 @@ import numpy as np
 from enum import Enum
 
 from ..events.event_types import SignalEvent, OrderEvent
-from ..models.signals import Signal
+from ..models.signals import TradingSignal
 from ..models.orders import Order
 
 
@@ -102,7 +102,7 @@ class BaseStrategy(ABC):
         pass
     
     @abstractmethod
-    def generate_signals(self, data: pd.DataFrame) -> List[Signal]:
+    def generate_signals(self, data: pd.DataFrame) -> List[TradingSignal]:
         """
         生成交易信号
         
@@ -110,7 +110,7 @@ class BaseStrategy(ABC):
             data: 市场数据
             
         Returns:
-            List[Signal]: 交易信号列表
+            List[TradingSignal]: 交易信号列表
         """
         pass
     
@@ -208,7 +208,7 @@ class BaseStrategy(ABC):
         """清空缓存"""
         self.data_cache.clear()
         
-    def log_signal(self, signal: Signal) -> None:
+    def log_signal(self, signal: TradingSignal) -> None:
         """
         记录信号
         

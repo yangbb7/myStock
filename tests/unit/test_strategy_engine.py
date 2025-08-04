@@ -393,8 +393,8 @@ class TestStrategyEngine(BaseTestCase):
         signals = engine.process_bar_data(bar_data)
         
         assert len(signals) == 2
-        assert signals[0]['signal_type'] == SignalType.BUY
-        assert signals[1]['signal_type'] == SignalType.SELL
+        assert signals[0]['signal_type'] == SignalType.BUY.value
+        assert signals[1]['signal_type'] == SignalType.SELL.value
         mock_strategy.on_bar.assert_called_once_with(bar_data)
     
     @pytest.mark.unit

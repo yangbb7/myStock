@@ -1,0 +1,365 @@
+name: Frontend Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'frontend/**'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'frontend/**'
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+    
+    - name: Install dependencies
+      working-directory: ./frontend
+      run: npm ci
+    
+    - name: Run type checking
+      working-directory: ./frontend
+      run: npm run type-check
+    
+    - name: Run linting
+      working-directory: ./frontend
+      run: npm run lint
+    
+    - name: Run unit tests
+      working-directory: ./frontend
+      run: npm run test:run
+    
+    - name: Generate test coverage
+      working-directory: ./frontend
+      run: npm run test:coverage
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./frontend/coverage/lcov.info
+        flags: frontend
+        name: frontend-coverage
+        fail_ci_if_error: false
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    
+    services:
+      backend:
+        image: myquant-backend:test
+        ports:
+          - 8000:8000
+        env:
+          NODE_ENV: test
+          DATABASE_URL: sqlite:///:memory:
+        options: >-
+          --health-cmd "curl -f http://localhost:8000/health || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+    
+    - name: Install dependencies
+      working-directory: ./frontend
+      run: npm ci
+    
+    - name: Wait for backend to be ready
+      run: |
+        timeout 60 bash -c 'until curl -f http://localhost:8000/health; do sleep 2; done'
+    
+    - name: Run integration tests
+      working-directory: ./frontend
+      run: npm run test:integration
+      env:
+        VITE_API_BASE_URL: http://localhost:8000
+        VITE_WS_BASE_URL: ws://localhost:8000
+    
+    - name: Upload integration test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: integration-test-results
+        path: frontend/test-results/
+
+  e2e-tests:
+    runs-on: ubuntu-latest
+    
+    services:
+      backend:
+        image: myquant-backend:test
+        ports:
+          - 8000:8000
+        env:
+          NODE_ENV: test
+          DATABASE_URL: sqlite:///:memory:
+        options: >-
+          --health-cmd "curl -f http://localhost:8000/health || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+    
+    - name: Install dependencies
+      working-directory: ./frontend
+      run: npm ci
+    
+    - name: Install Playwright browsers
+      working-directory: ./frontend
+      run: npx playwright install --with-deps
+    
+    - name: Build frontend
+      working-directory: ./frontend
+      run: npm run build
+      env:
+        VITE_API_BASE_URL: http://localhost:8000
+        VITE_WS_BASE_URL: ws://localhost:8000
+    
+    - name: Start frontend server
+      working-directory: ./frontend
+      run: npm run preview &
+      env:
+        PORT: 3000
+    
+    - name: Wait for frontend to be ready
+      run: |
+        timeout 60 bash -c 'until curl -f http://localhost:3000; do sleep 2; done'
+    
+    - name: Wait for backend to be ready
+      run: |
+        timeout 60 bash -c 'until curl -f http://localhost:8000/health; do sleep 2; done'
+    
+    - name: Run E2E tests
+      working-directory: ./frontend
+      run: npx playwright test
+      env:
+        PLAYWRIGHT_BASE_URL: http://localhost:3000
+    
+    - name: Upload E2E test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: e2e-test-results
+        path: |
+          frontend/test-results/
+          frontend/playwright-report/
+    
+    - name: Upload E2E test videos
+      uses: actions/upload-artifact@v3
+      if: failure()
+      with:
+        name: e2e-test-videos
+        path: frontend/test-results/videos/
+
+  visual-regression-tests:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+    
+    - name: Install dependencies
+      working-directory: ./frontend
+      run: npm ci
+    
+    - name: Install Playwright browsers
+      working-directory: ./frontend
+      run: npx playwright install --with-deps
+    
+    - name: Build frontend
+      working-directory: ./frontend
+      run: npm run build
+      env:
+        VITE_API_BASE_URL: http://localhost:8000
+        VITE_WS_BASE_URL: ws://localhost:8000
+    
+    - name: Start frontend server
+      working-directory: ./frontend
+      run: npm run preview &
+      env:
+        PORT: 3000
+    
+    - name: Wait for frontend to be ready
+      run: |
+        timeout 60 bash -c 'until curl -f http://localhost:3000; do sleep 2; done'
+    
+    - name: Run visual regression tests
+      working-directory: ./frontend
+      run: npx playwright test --grep="visual"
+    
+    - name: Upload visual test results
+      uses: actions/upload-artifact@v3
+      if: failure()
+      with:
+        name: visual-test-results
+        path: |
+          frontend/test-results/
+          frontend/playwright-report/
+
+  performance-tests:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+    
+    - name: Install dependencies
+      working-directory: ./frontend
+      run: npm ci
+    
+    - name: Build frontend
+      working-directory: ./frontend
+      run: npm run build
+      env:
+        NODE_ENV: production
+    
+    - name: Analyze bundle size
+      working-directory: ./frontend
+      run: npm run build:analyze
+    
+    - name: Run Lighthouse CI
+      working-directory: ./frontend
+      run: |
+        npm install -g @lhci/cli@0.12.x
+        lhci autorun
+      env:
+        LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
+    
+    - name: Upload performance results
+      uses: actions/upload-artifact@v3
+      with:
+        name: performance-results
+        path: |
+          frontend/.lighthouseci/
+          frontend/dist/stats.html
+
+  security-tests:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+    
+    - name: Install dependencies
+      working-directory: ./frontend
+      run: npm ci
+    
+    - name: Run security audit
+      working-directory: ./frontend
+      run: npm audit --audit-level=moderate
+    
+    - name: Run dependency vulnerability scan
+      working-directory: ./frontend
+      run: |
+        npm install -g snyk
+        snyk test --severity-threshold=medium
+      env:
+        SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+    
+    - name: Upload security scan results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: security-scan-results
+        path: frontend/security-results/
+
+  test-summary:
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests, e2e-tests, visual-regression-tests, performance-tests, security-tests]
+    if: always()
+    
+    steps:
+    - name: Download all test artifacts
+      uses: actions/download-artifact@v3
+    
+    - name: Generate test summary
+      run: |
+        echo "# Test Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## Test Results" >> $GITHUB_STEP_SUMMARY
+        echo "- Unit Tests: ${{ needs.unit-tests.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "- Integration Tests: ${{ needs.integration-tests.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "- E2E Tests: ${{ needs.e2e-tests.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "- Visual Regression Tests: ${{ needs.visual-regression-tests.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "- Performance Tests: ${{ needs.performance-tests.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "- Security Tests: ${{ needs.security-tests.result }}" >> $GITHUB_STEP_SUMMARY
+    
+    - name: Notify on failure
+      if: failure()
+      uses: actions/github-script@v6
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: '❌ Frontend tests failed. Please check the test results and fix the issues.'
+          })
+    
+    - name: Notify on success
+      if: success()
+      uses: actions/github-script@v6
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: '✅ All frontend tests passed successfully!'
+          })

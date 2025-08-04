@@ -1,351 +1,478 @@
-# Standard library imports
-from datetime import datetime, timedelta
-from unittest.mock import Mock, patch, MagicMock
-# Third-party imports
-import numpy as np
-import pandas as pd
+"""
+PortfolioManager单元测试
+
+测试投资组合管理器的核心功能
+按照TDD原则，先编写完整的单元测试，确保测试全部失败，然后实现功能代码
+"""
+
 import pytest
+import pytest_asyncio
+from datetime import datetime, timezone
+from decimal import Decimal
+from typing import Dict, List, Optional
+from unittest.mock import AsyncMock, Mock, patch
 
-# Local imports
-try:
-    from core.managers.portfolio_manager import PortfolioManager
-    MANAGERS_AVAILABLE = True
-except ImportError:
-    MANAGERS_AVAILABLE = False
-
-try:
-    from core.portfolio_manager import PortfolioManager as CorePortfolioManager
-    CORE_AVAILABLE = True
-except ImportError:
-    CORE_AVAILABLE = False
-
-from core.exceptions import ConfigurationException
-from tests.base_test import BaseTestCase, TestDataFactory, MockFactory, IsolatedComponentFactory
+from myQuant.core.managers.portfolio_manager import PortfolioManager
+from myQuant.core.models.portfolio import Portfolio
+from myQuant.core.models.positions import Position
+from myQuant.core.models.orders import Order, OrderSide, OrderType
+from myQuant.infrastructure.database.database_manager import DatabaseManager
+from myQuant.infrastructure.database.repositories import PositionRepository, UserRepository
 
 
-class TestPortfolioManagerIntegrated(BaseTestCase):
-    """投资组合管理器测试用例 - 整合版本，覆盖所有测试场景"""
-    
-    @pytest.fixture
-    def portfolio_config(self):
-        """投资组合配置fixture"""
-        return TestDataFactory.create_portfolio_config()
-    
-    @pytest.fixture
-    def simple_portfolio_config(self):
-        """简化投资组合配置fixture"""
-        return {
-            'initial_capital': 1000000,
-            'commission_rate': 0.0003,
-            'max_positions': 50
+@pytest.fixture
+def test_db_url():
+    """测试数据库URL"""
+    return "sqlite:///:memory:"
+
+
+@pytest_asyncio.fixture
+async def database_manager(test_db_url):
+    """测试用数据库管理器"""
+    manager = DatabaseManager(test_db_url)
+    await manager.initialize()
+    yield manager
+    await manager.close()
+
+
+@pytest.fixture
+def mock_position_repository():
+    """模拟持仓Repository"""
+    return Mock(spec=PositionRepository)
+
+
+@pytest.fixture
+def mock_user_repository():
+    """模拟用户Repository"""
+    return Mock(spec=UserRepository)
+
+
+@pytest.fixture
+def sample_positions():
+    """示例持仓数据"""
+    return [
+        Position(1, "000001.SZ", 1000, Decimal("12.00")),
+        Position(1, "000002.SZ", 500, Decimal("25.00")),
+        Position(1, "600000.SH", 800, Decimal("8.50"))
+    ]
+
+
+@pytest.fixture
+def sample_prices():
+    """示例价格数据"""
+    return {
+        "000001.SZ": Decimal("12.75"),
+        "000002.SZ": Decimal("26.00"),
+        "600000.SH": Decimal("8.80")
+    }
+
+
+class TestPortfolioManager:
+    """PortfolioManager测试"""
+
+    @pytest.mark.asyncio
+    async def test_portfolio_manager_initialization(self, database_manager):
+        """测试PortfolioManager初始化"""
+        # Arrange & Act
+        manager = PortfolioManager(database_manager)
+
+        # Assert
+        assert manager.db_manager == database_manager
+        assert manager.position_repository is not None
+        assert manager.user_repository is not None
+
+    @pytest.mark.asyncio
+    async def test_create_portfolio(self, database_manager):
+        """测试创建投资组合"""
+        # Arrange
+        manager = PortfolioManager(database_manager)
+        user_id = 1
+        initial_capital = Decimal("1000000.00")
+
+        # Act
+        portfolio = await manager.create_portfolio(user_id, initial_capital)
+
+        # Assert
+        assert isinstance(portfolio, Portfolio)
+        assert portfolio.user_id == user_id
+        assert portfolio.initial_capital == initial_capital
+        assert portfolio.cash_balance == initial_capital
+        assert len(portfolio.positions) == 0
+
+    @pytest.mark.asyncio
+    async def test_get_portfolio_by_user(self, database_manager, sample_positions):
+        """测试根据用户获取投资组合"""
+        # Arrange
+        manager = PortfolioManager(database_manager)
+        user_id = 1
+        
+        # 预先创建投资组合和持仓
+        portfolio = await manager.create_portfolio(user_id, Decimal("1000000.00"))
+        
+        # Mock持仓数据
+        with patch.object(manager.position_repository, 'get_positions_by_user', return_value=sample_positions):
+            # Act
+            retrieved_portfolio = await manager.get_portfolio_by_user(user_id)
+
+            # Assert
+            assert isinstance(retrieved_portfolio, Portfolio)
+            assert retrieved_portfolio.user_id == user_id
+            assert len(retrieved_portfolio.positions) == 3
+
+    @pytest.mark.asyncio
+    async def test_add_position_to_portfolio(self, database_manager):
+        """测试向投资组合添加持仓"""
+        # Arrange
+        manager = PortfolioManager(database_manager)
+        user_id = 1
+        portfolio = await manager.create_portfolio(user_id, Decimal("1000000.00"))
+        
+        position_data = {
+            "symbol": "000001.SZ",
+            "quantity": 1000,
+            "average_price": Decimal("12.00")
         }
-    
-    @pytest.fixture
-    def sample_positions(self):
-        """样本持仓fixture"""
-        return TestDataFactory.create_sample_positions()
-    
-    @pytest.fixture
-    def sample_orders(self):
-        """样本订单fixture"""
-        return TestDataFactory.create_sample_orders()
-    
-    @pytest.fixture
-    def sample_trade(self):
-        """样本交易fixture"""
-        return {
-            'symbol': '000001.SZ',
-            'side': 'BUY',
-            'quantity': 1000,
-            'price': 15.0,
-            'timestamp': datetime.now()
+
+        # Act
+        result = await manager.add_position(user_id, position_data)
+
+        # Assert
+        assert result is True
+        
+        # 验证持仓已添加到数据库
+        portfolio = await manager.get_portfolio_by_user(user_id)
+        assert "000001.SZ" in [pos.symbol for pos in portfolio.positions.values()]
+
+    @pytest.mark.asyncio
+    async def test_update_position_in_portfolio(self, database_manager):
+        """测试更新投资组合中的持仓"""
+        # Arrange
+        manager = PortfolioManager(database_manager)
+        user_id = 1
+        await manager.create_portfolio(user_id, Decimal("1000000.00"))
+        
+        # 先添加持仓
+        position_data = {
+            "symbol": "000001.SZ",
+            "quantity": 1000,
+            "average_price": Decimal("12.00")
         }
-    
-    @pytest.fixture
-    def price_data(self):
-        """价格数据fixture"""
-        return {
-            '000001.SZ': 15.0,
-            '000002.SZ': 20.0,
-            '600000.SH': 25.0,
-            '000858.SZ': 30.0,
-            '600519.SH': 180.0
+        await manager.add_position(user_id, position_data)
+
+        # Act - 更新持仓
+        update_data = {
+            "quantity": 1500,
+            "average_price": Decimal("12.20")
         }
+        result = await manager.update_position_async(user_id, "000001.SZ", update_data)
 
-    def _get_portfolio_manager(self, config):
-        """获取可用的投资组合管理器实例"""
-        if MANAGERS_AVAILABLE:
-            try:
-                return PortfolioManager(config)
-            except Exception:
-                pass
+        # Assert
+        assert result is True
         
-        if CORE_AVAILABLE:
-            try:
-                return CorePortfolioManager(config)
-            except Exception:
-                pass
-        
-        pytest.skip("没有可用的PortfolioManager实现")
+        # 验证持仓已更新
+        portfolio = await manager.get_portfolio_by_user(user_id)
+        position = portfolio.positions["000001.SZ"]
+        assert position.quantity == 1500
+        assert position.average_price == Decimal("12.20")
 
-    # === 初始化测试 ===
-    @pytest.mark.unit
-    def test_portfolio_manager_init_success(self, portfolio_config):
-        """测试投资组合管理器正常初始化"""
-        pm = self._get_portfolio_manager(portfolio_config)
+    @pytest.mark.asyncio
+    async def test_remove_position_from_portfolio(self, database_manager):
+        """测试从投资组合移除持仓"""
+        # Arrange
+        manager = PortfolioManager(database_manager)
+        user_id = 1
+        await manager.create_portfolio(user_id, Decimal("1000000.00"))
         
-        assert pm.initial_capital == portfolio_config['initial_capital']
-        assert pm.current_cash == portfolio_config['initial_capital']
-    
-    @pytest.mark.unit
-    def test_portfolio_manager_init_success_simple(self, simple_portfolio_config):
-        """测试简化配置初始化"""
-        if not CORE_AVAILABLE:
-            pytest.skip("CorePortfolioManager不可用")
-        
-        try:
-            pm = CorePortfolioManager(simple_portfolio_config)
-            assert pm.initial_capital == 1000000
-            assert pm.current_cash == 1000000
-            assert pm.commission_rate == 0.0003
-            if hasattr(pm, 'positions'):
-                assert len(pm.positions) == 0
-        except (ImportError, AttributeError, TypeError) as e:
-            pytest.skip(f"简化版本PortfolioManager不可用: {e}")
-    
-    @pytest.mark.unit
-    def test_portfolio_manager_init_invalid_capital(self):
-        """测试无效初始资金"""
-        config = {'initial_capital': -100000}
-        with pytest.raises((ValueError, ConfigurationException, TypeError)):
-            self._get_portfolio_manager(config)
+        # 先添加持仓
+        position_data = {
+            "symbol": "000001.SZ",
+            "quantity": 1000,
+            "average_price": Decimal("12.00")
+        }
+        await manager.add_position(user_id, position_data)
 
-    # === 仓位管理测试 ===
-    @pytest.mark.unit
-    def test_update_position_buy(self, simple_portfolio_config, sample_trade):
-        """测试更新仓位 - 买入"""
-        if not CORE_AVAILABLE:
-            pytest.skip("CorePortfolioManager不可用")
+        # Act
+        result = await manager.remove_position(user_id, "000001.SZ")
+
+        # Assert
+        assert result is True
         
-        try:
-            pm = CorePortfolioManager(simple_portfolio_config)
-            
-            # 检查是否有必要的方法
-            if not hasattr(pm, 'update_position'):
-                pytest.skip("update_position方法不可用")
-            
-            # 执行买入
-            pm.update_position(sample_trade)
-            
-            # 验证仓位
-            if hasattr(pm, 'get_position'):
-                position = pm.get_position('000001.SZ')
-                assert position is not None
-                if isinstance(position, dict):
-                    assert position.get('quantity') == 1000
-                    assert position.get('avg_cost') == 15.0
-            
-            # 验证现金减少
-            if hasattr(pm, 'calculate_commission'):
-                trade_value = 1000 * 15.0
-                commission = pm.calculate_commission(trade_value)
-                expected_cash = 1000000 - (trade_value + commission)
-                assert abs(pm.current_cash - expected_cash) < 10.0
-            
-        except (ImportError, AttributeError, TypeError) as e:
-            pytest.skip(f"仓位更新功能不可用: {e}")
-    
-    @pytest.mark.unit
-    def test_calculate_portfolio_value(self, portfolio_config, sample_positions, price_data):
-        """测试投资组合价值计算"""
-        pm = self._get_portfolio_manager(portfolio_config)
+        # 验证持仓已移除
+        portfolio = await manager.get_portfolio_by_user(user_id)
+        assert "000001.SZ" not in portfolio.positions
+
+    @pytest.mark.asyncio
+    async def test_calculate_portfolio_value(self, database_manager, sample_positions, sample_prices):
+        """测试计算投资组合总价值"""
+        # Arrange
+        manager = PortfolioManager(database_manager)
+        user_id = 1
+        portfolio = await manager.create_portfolio(user_id, Decimal("1000000.00"))
         
-        try:
-            # 设置模拟仓位
-            if hasattr(pm, 'positions'):
-                for symbol, position in sample_positions.items():
-                    pm.positions[symbol] = position
-            
-            # 计算组合价值
-            if hasattr(pm, 'calculate_portfolio_value'):
-                total_value = pm.calculate_portfolio_value(price_data)
-                assert total_value > 0
-                
-                # 验证计算逻辑
-                expected_value = sum(pos['market_value'] for pos in sample_positions.values())
-                assert abs(total_value - expected_value) < 1000
-            else:
-                pytest.skip("calculate_portfolio_value方法不可用")
-        except (ImportError, AttributeError, TypeError) as e:
-            pytest.skip(f"组合价值计算功能不可用: {e}")
-    
-    @pytest.mark.unit
-    def test_risk_management_position_size(self, portfolio_config):
-        """测试仓位大小风险管理"""
-        pm = self._get_portfolio_manager(portfolio_config)
+        # Mock持仓数据
+        with patch.object(manager.position_repository, 'get_positions_by_user', return_value=sample_positions):
+            # Act
+            total_value = await manager.calculate_portfolio_value(user_id, sample_prices)
+
+            # Assert
+            # 000001.SZ: 1000 * 12.75 = 12750
+            # 000002.SZ: 500 * 26.00 = 13000  
+            # 600000.SH: 800 * 8.80 = 7040
+            # 持仓价值: 1000*12.75 + 500*26.00 + 800*8.80 = 12750 + 13000 + 7040 = 32790
+            # 现金: 1000000 (因为没有实际购买，现金未减少)
+            # 总计: 32790 + 1000000 = 1032790
+            expected_total = Decimal("1032790.00")
+            assert total_value == expected_total
+
+    @pytest.mark.asyncio
+    async def test_calculate_portfolio_pnl(self, database_manager, sample_positions, sample_prices):
+        """测试计算投资组合盈亏"""
+        # Arrange
+        manager = PortfolioManager(database_manager)
+        user_id = 1
+        await manager.create_portfolio(user_id, Decimal("1000000.00"))
         
-        try:
-            # 测试超过最大仓位数量限制
-            if hasattr(pm, 'validate_position_size'):
-                # 正常情况
-                result = pm.validate_position_size('000001.SZ', 100000)
-                assert result is True or isinstance(result, dict)
-                
-                # 超过限制情况
-                oversized_amount = pm.initial_capital * 0.5  # 50%仓位
-                result = pm.validate_position_size('000001.SZ', oversized_amount)
-                assert result is False or isinstance(result, dict)
-            else:
-                pytest.skip("validate_position_size方法不可用")
-        except (ImportError, AttributeError, TypeError) as e:
-            pytest.skip(f"仓位大小验证功能不可用: {e}")
-    
-    @pytest.mark.unit
-    def test_performance_metrics_calculation(self, portfolio_config, sample_positions):
-        """测试绩效指标计算"""
-        pm = self._get_portfolio_manager(portfolio_config)
+        # Mock持仓数据
+        with patch.object(manager.position_repository, 'get_positions_by_user', return_value=sample_positions):
+            # Act
+            total_pnl = await manager.calculate_portfolio_pnl(user_id, sample_prices)
+
+            # Assert
+            # 000001.SZ: (12.75 - 12.00) * 1000 = 750
+            # 000002.SZ: (26.00 - 25.00) * 500 = 500
+            # 600000.SH: (8.80 - 8.50) * 800 = 240
+            # 总计: 1490
+            expected_pnl = Decimal("1490.00")
+            assert total_pnl == expected_pnl
+
+    @pytest.mark.asyncio
+    async def test_get_portfolio_summary(self, database_manager, sample_positions, sample_prices):
+        """测试获取投资组合摘要"""
+        # Arrange
+        manager = PortfolioManager(database_manager)
+        user_id = 1
+        await manager.create_portfolio(user_id, Decimal("1000000.00"))
         
-        try:
-            # 设置模拟仓位
-            if hasattr(pm, 'positions'):
-                for symbol, position in sample_positions.items():
-                    pm.positions[symbol] = position
-            
-            # 计算绩效指标
-            if hasattr(pm, 'calculate_performance_metrics'):
-                metrics = pm.calculate_performance_metrics()
-                self.assert_performance_metrics_valid(metrics)
-            else:
-                pytest.skip("calculate_performance_metrics方法不可用")
-        except (ImportError, AttributeError, TypeError) as e:
-            pytest.skip(f"绩效指标计算功能不可用: {e}")
-    
-    @pytest.mark.unit
-    def test_commission_calculation(self, simple_portfolio_config):
-        """测试佣金计算"""
-        if not CORE_AVAILABLE:
-            pytest.skip("CorePortfolioManager不可用")
+        # Mock持仓数据
+        with patch.object(manager.position_repository, 'get_positions_by_user', return_value=sample_positions):
+            # Act
+            summary = await manager.get_portfolio_summary(user_id, sample_prices)
+
+            # Assert
+            assert summary.total_value > 0
+            assert summary.position_value > 0
+            assert summary.cash_balance > 0
+            assert summary.total_pnl > 0
+            assert summary.positions_count == 3
+            assert summary.total_return > 0
+
+    @pytest.mark.asyncio
+    async def test_update_cash_balance(self, database_manager):
+        """测试更新现金余额"""
+        # Arrange
+        manager = PortfolioManager(database_manager)
+        user_id = 1
+        await manager.create_portfolio(user_id, Decimal("1000000.00"))
+
+        # Act - 减少现金（买入股票）
+        result = await manager.update_cash_balance(user_id, Decimal("-24500.00"))
+
+        # Assert
+        assert result is True
         
-        try:
-            pm = CorePortfolioManager(simple_portfolio_config)
+        portfolio = await manager.get_portfolio_by_user(user_id)
+        assert portfolio.cash_balance == Decimal("975500.00")
+
+        # Act - 增加现金（卖出股票）
+        result = await manager.update_cash_balance(user_id, Decimal("12750.00"))
+
+        # Assert
+        assert result is True
+        
+        portfolio = await manager.get_portfolio_by_user(user_id)
+        assert portfolio.cash_balance == Decimal("988250.00")
+
+    @pytest.mark.asyncio
+    async def test_update_cash_balance_insufficient_funds(self, database_manager):
+        """测试现金余额不足的情况"""
+        # Arrange
+        manager = PortfolioManager(database_manager)
+        user_id = 1
+        await manager.create_portfolio(user_id, Decimal("1000000.00"))
+
+        # Act - 尝试减少过多现金
+        result = await manager.update_cash_balance(user_id, Decimal("-2000000.00"))
+
+        # Assert
+        assert result is False
+        
+        # 验证余额未改变
+        portfolio = await manager.get_portfolio_by_user(user_id)
+        assert portfolio.cash_balance == Decimal("1000000.00")
+
+    @pytest.mark.asyncio
+    async def test_process_order_execution_buy(self, database_manager):
+        """测试处理订单执行 - 买入"""
+        # Arrange
+        manager = PortfolioManager(database_manager)
+        user_id = 1
+        await manager.create_portfolio(user_id, Decimal("1000000.00"))
+
+        order = Order(
+            symbol="000001.SZ",
+            side=OrderSide.BUY,
+            order_type=OrderType.LIMIT,
+            quantity=1000,
+            price=Decimal("12.50"),
+            user_id=user_id
+        )
+        order.fill(1000, Decimal("12.50"))  # 完全成交
+
+        # Act
+        result = await manager.process_order_execution(order)
+
+        # Assert
+        assert result is True
+        
+        # 验证持仓已添加
+        portfolio = await manager.get_portfolio_by_user(user_id)
+        assert "000001.SZ" in [pos.symbol for pos in portfolio.positions.values()]
+        
+        # 验证现金减少
+        expected_cash = Decimal("1000000.00") - Decimal("12500.00")  # 1000 * 12.50
+        assert portfolio.cash_balance == expected_cash
+
+    @pytest.mark.asyncio
+    async def test_process_order_execution_sell(self, database_manager):
+        """测试处理订单执行 - 卖出"""
+        # Arrange
+        manager = PortfolioManager(database_manager)
+        user_id = 1
+        await manager.create_portfolio(user_id, Decimal("1000000.00"))
+        
+        # 先添加持仓
+        position_data = {
+            "symbol": "000001.SZ",
+            "quantity": 2000,
+            "average_price": Decimal("12.00")
+        }
+        await manager.add_position(user_id, position_data)
+
+        order = Order(
+            symbol="000001.SZ",
+            side=OrderSide.SELL,
+            order_type=OrderType.LIMIT,
+            quantity=1000,
+            price=Decimal("12.75"),
+            user_id=user_id
+        )
+        order.fill(1000, Decimal("12.75"))  # 完全成交
+
+        # Act
+        result = await manager.process_order_execution(order)
+
+        # Assert
+        assert result is True
+        
+        # 验证持仓减少
+        portfolio = await manager.get_portfolio_by_user(user_id)
+        position = portfolio.positions["000001.SZ"]
+        assert position.quantity == 1000  # 2000 - 1000 = 1000
+        
+        # 验证现金增加
+        initial_cost = Decimal("2000") * Decimal("12.00")  # 24000
+        remaining_cash = Decimal("1000000.00") - initial_cost
+        sale_proceeds = Decimal("1000") * Decimal("12.75")  # 12750
+        expected_cash = remaining_cash + sale_proceeds
+        assert portfolio.cash_balance == expected_cash
+
+    @pytest.mark.asyncio
+    async def test_get_position_allocation(self, database_manager, sample_positions, sample_prices):
+        """测试获取持仓配置"""
+        # Arrange
+        manager = PortfolioManager(database_manager)
+        user_id = 1
+        await manager.create_portfolio(user_id, Decimal("1000000.00"))
+        
+        # Mock持仓数据
+        with patch.object(manager.position_repository, 'get_positions_by_user', return_value=sample_positions):
+            # Act
+            allocation = await manager.get_position_allocation(user_id, sample_prices)
+
+            # Assert
+            assert isinstance(allocation, dict)
+            assert len(allocation) == 3
+            assert "000001.SZ" in allocation
+            assert "000002.SZ" in allocation
+            assert "600000.SH" in allocation
             
-            if hasattr(pm, 'calculate_commission'):
-                # 测试不同交易金额的佣金计算
-                trade_amounts = [10000, 50000, 100000, 500000]
-                for amount in trade_amounts:
-                    commission = pm.calculate_commission(amount)
-                    expected = amount * 0.0003  # 0.03%
-                    assert abs(commission - expected) < 0.01
-            else:
-                pytest.skip("calculate_commission方法不可用")
-        except (ImportError, AttributeError, TypeError) as e:
-            pytest.skip(f"佣金计算功能不可用: {e}")
-    
-    @pytest.mark.unit
-    def test_position_rebalancing(self, portfolio_config, sample_positions, price_data):
+            # 验证配置比例总和约为100%（除了现金部分）
+            total_allocation = sum(allocation.values())
+            assert 0 < total_allocation < 100  # 应该小于100%，因为有现金
+
+    @pytest.mark.asyncio
+    async def test_rebalance_portfolio(self, database_manager, sample_positions):
         """测试投资组合再平衡"""
-        pm = self._get_portfolio_manager(portfolio_config)
+        # Arrange
+        manager = PortfolioManager(database_manager)
+        user_id = 1
+        await manager.create_portfolio(user_id, Decimal("1000000.00"))
         
-        try:
-            # 设置当前仓位
-            if hasattr(pm, 'positions'):
-                for symbol, position in sample_positions.items():
-                    pm.positions[symbol] = position
-            
-            # 测试再平衡
-            if hasattr(pm, 'rebalance_portfolio'):
-                target_weights = {
-                    '000001.SZ': 0.4,
-                    '000002.SZ': 0.3,
-                    '600000.SH': 0.3
-                }
-                
-                rebalance_orders = pm.rebalance_portfolio(target_weights, price_data)
-                assert isinstance(rebalance_orders, list)
-                
-                # 验证订单的有效性
-                for order in rebalance_orders:
-                    self.assert_order_valid(order)
-            else:
-                pytest.skip("rebalance_portfolio方法不可用")
-        except (ImportError, AttributeError, TypeError) as e:
-            pytest.skip(f"投资组合再平衡功能不可用: {e}")
-    
-    @pytest.mark.unit
-    def test_cash_management(self, simple_portfolio_config):
-        """测试现金管理"""
-        if not CORE_AVAILABLE:
-            pytest.skip("CorePortfolioManager不可用")
+        target_allocation = {
+            "000001.SZ": Decimal("30.0"),  # 30%
+            "000002.SZ": Decimal("40.0"),  # 40%
+            "600000.SH": Decimal("20.0"),  # 20%
+        }
         
-        try:
-            pm = CorePortfolioManager(simple_portfolio_config)
-            
-            # 测试现金充足性检查
-            if hasattr(pm, 'check_cash_availability'):
-                # 足够现金
-                assert pm.check_cash_availability(500000) is True
-                
-                # 现金不足
-                assert pm.check_cash_availability(1500000) is False
-            
-            # 测试现金使用
-            if hasattr(pm, 'allocate_cash'):
-                initial_cash = pm.current_cash
-                pm.allocate_cash(100000)
-                assert pm.current_cash == initial_cash - 100000
-            
-        except (ImportError, AttributeError, TypeError) as e:
-            pytest.skip(f"现金管理功能不可用: {e}")
-    
-    @pytest.mark.unit
-    def test_portfolio_diversification_metrics(self, portfolio_config, sample_positions):
-        """测试投资组合分散化指标"""
-        pm = self._get_portfolio_manager(portfolio_config)
+        current_prices = {
+            "000001.SZ": Decimal("12.75"),
+            "000002.SZ": Decimal("26.00"),
+            "600000.SH": Decimal("8.80")
+        }
+
+        # Act
+        rebalance_orders = await manager.rebalance_portfolio(user_id, target_allocation, current_prices)
+
+        # Assert
+        assert isinstance(rebalance_orders, list)
+        # 验证生成的再平衡订单
+        for order in rebalance_orders:
+            assert hasattr(order, 'symbol')
+            assert hasattr(order, 'side')
+            assert hasattr(order, 'quantity')
+            assert hasattr(order, 'price')
+
+    @pytest.mark.asyncio
+    async def test_portfolio_performance_metrics(self, database_manager, sample_positions, sample_prices):
+        """测试投资组合绩效指标"""
+        # Arrange
+        manager = PortfolioManager(database_manager)
+        user_id = 1
+        await manager.create_portfolio(user_id, Decimal("1000000.00"))
         
-        try:
-            # 设置仓位
-            if hasattr(pm, 'positions'):
-                for symbol, position in sample_positions.items():
-                    pm.positions[symbol] = position
-            
-            # 计算分散化指标
-            if hasattr(pm, 'calculate_diversification_metrics'):
-                metrics = pm.calculate_diversification_metrics()
-                assert isinstance(metrics, dict)
-                
-                # 验证指标合理性
-                if 'sector_concentration' in metrics:
-                    assert 0 <= metrics['sector_concentration'] <= 1
-                
-                if 'position_count' in metrics:
-                    assert metrics['position_count'] >= 0
-            else:
-                pytest.skip("calculate_diversification_metrics方法不可用")
-        except (ImportError, AttributeError, TypeError) as e:
-            pytest.skip(f"分散化指标计算功能不可用: {e}")
-    
-    @pytest.mark.unit
-    def test_error_handling_invalid_trade(self, simple_portfolio_config):
-        """测试无效交易的错误处理"""
-        if not CORE_AVAILABLE:
-            pytest.skip("CorePortfolioManager不可用")
-        
-        try:
-            pm = CorePortfolioManager(simple_portfolio_config)
-            
-            if hasattr(pm, 'update_position'):
-                # 测试无效的交易数据
-                invalid_trades = [
-                    {'symbol': '', 'side': 'BUY', 'quantity': 1000, 'price': 15.0},  # 空symbol
-                    {'symbol': '000001.SZ', 'side': 'INVALID', 'quantity': 1000, 'price': 15.0},  # 无效side
-                    {'symbol': '000001.SZ', 'side': 'BUY', 'quantity': -1000, 'price': 15.0},  # 负数量
-                    {'symbol': '000001.SZ', 'side': 'BUY', 'quantity': 1000, 'price': -15.0},  # 负价格
-                ]
-                
-                for invalid_trade in invalid_trades:
-                    with pytest.raises((ValueError, TypeError, ConfigurationException)):
-                        pm.update_position(invalid_trade)
-            else:
-                pytest.skip("update_position方法不可用")
-        except (ImportError, AttributeError, TypeError) as e:
-            pytest.skip(f"交易错误处理功能不可用: {e}")
+        # Mock持仓数据
+        with patch.object(manager.position_repository, 'get_positions_by_user', return_value=sample_positions):
+            # Mock历史价值数据
+            historical_values = [
+                Decimal("1000000.00"),
+                Decimal("1005000.00"),
+                Decimal("1002000.00"),
+                Decimal("1001490.00")
+            ]
+
+            # Act
+            metrics = await manager.calculate_performance_metrics(user_id, sample_prices, historical_values)
+
+            # Assert
+            assert hasattr(metrics, 'total_return')
+            assert hasattr(metrics, 'volatility')
+            assert hasattr(metrics, 'max_drawdown')
+            assert hasattr(metrics, 'sharpe_ratio')
+            assert metrics.total_return > 0
+            assert metrics.volatility >= 0
+            assert metrics.max_drawdown <= 0
+
+
+if __name__ == "__main__":
+    # 运行测试确保全部失败（TDD第一步）
+    pytest.main([__file__, "-v", "--tb=short"])

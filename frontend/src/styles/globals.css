@@ -1,0 +1,106 @@
+/* Global styles */
+:root {
+  --primary-color: #1890ff;
+  --success-color: #52c41a;
+  --warning-color: #faad14;
+  --error-color: #f5222d;
+  --text-color: rgba(0, 0, 0, 0.85);
+  --text-color-secondary: rgba(0, 0, 0, 0.65);
+  --background-color: #f0f2f5;
+  --border-color: #d9d9d9;
+  --border-radius: 6px;
+  --box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  
+  /* Theme variables (will be updated by ThemeProvider) */
+  --bg-color: #ffffff;
+  --card-bg: #ffffff;
+}
+
+/* Light theme */
+.light-theme {
+  --bg-color: #ffffff;
+  --text-color: #000000;
+  --border-color: #d9d9d9;
+  --card-bg: #ffffff;
+}
+
+/* Dark theme */
+.dark-theme {
+  --bg-color: #141414;
+  --text-color: #ffffff;
+  --border-color: #434343;
+  --card-bg: #1f1f1f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial,
+    sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
+  font-size: 14px;
+  line-height: 1.5715;
+  color: var(--text-color);
+  background-color: var(--background-color);
+}
+
+.main-layout {
+  min-height: 100vh;
+}
+
+.page-container {
+  padding: 24px;
+}
+
+.card-container {
+  margin-bottom: 24px;
+}
+
+/* Utility classes */
+.text-center {
+  text-align: center;
+}
+
+.text-right {
+  text-align: right;
+}
+
+.mb-16 {
+  margin-bottom: 16px;
+}
+
+.mb-24 {
+  margin-bottom: 24px;
+}
+
+/* Animation classes */
+.fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .page-container {
+    padding: 16px;
+  }
+
+  .card-container {
+    margin-bottom: 16px;
+  }
+}

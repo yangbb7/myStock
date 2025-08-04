@@ -1,0 +1,10 @@
+
+> frontend@0.0.0 dev
+> vite
+
+
+  VITE v7.0.5  ready in 139 ms
+
+  ➜  Local:   http://localhost:3000/
+  ➜  Network: use --host to expose
+4:09:19 PM [vite] (client) hmr update /src/components/Layout/LayoutExample.tsx, /src/components/auth/ProtectedRoute.tsx, /src/pages/auth/Login.tsx, /src/pages/auth/Register.tsx, /src/components/Layout/Header.tsx

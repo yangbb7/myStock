@@ -9,14 +9,14 @@ import psutil
 import pytest
 
 # Local imports
-from core.managers.data_manager import DataManager
-from core.strategy_engine import StrategyEngine
-from core.backtest_engine import BacktestEngine
-from core.risk_manager import RiskManager
-from core.portfolio_manager import PortfolioManager
-from core.managers.order_manager import OrderManager
-from core.analysis.performance_analyzer import PerformanceAnalyzer
-from core.trading_system import TradingSystem
+from myQuant.core.managers.data_manager import DataManager
+from myQuant.core.engines.strategy_engine import StrategyEngine
+from myQuant.core.engines.backtest_engine import BacktestEngine
+from myQuant.core.managers.risk_manager import RiskManager
+from myQuant.core.managers.portfolio_manager import PortfolioManager
+from myQuant.core.managers.order_manager import OrderManager
+from myQuant.core.analysis.performance_analyzer import PerformanceAnalyzer
+from myQuant.core.trading_system import TradingSystem
 
 class TestSystemIntegration:
     """系统集成测试用例 - 测试各模块间的协作"""
@@ -533,7 +533,7 @@ class TestSystemIntegration:
         }
         
         portfolio_manager.update_position(test_order)
-        order_id = order_manager.create_order(test_order)
+        order_id = order_manager.create_order_sync(test_order)
         
         # 保存系统状态 - 使用现有方法而非不存在的save_state
         system_state = {
